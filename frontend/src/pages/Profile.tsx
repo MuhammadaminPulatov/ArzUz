@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle2, ChevronRight, Zap, Star, Trophy, MapPin } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Zap, Star, Trophy, MapPin, Shield, FileText, Award } from 'lucide-react'
 import { BADGES, SAMPLE_REPORTS } from '../data/mock'
 
 const STATUS_CONFIG = {
@@ -18,14 +18,16 @@ const LEADERBOARD = [
 ]
 
 const TABS = [
-  { id: 'reports', label: 'Arizalarim', emoji: '📋' },
-  { id: 'badges', label: 'Nishonlar', emoji: '🏆' },
-  { id: 'leaderboard', label: 'Reyting', emoji: '🏅' },
+  { id: 'reports',     label: 'Arizalarim', icon: FileText },
+  { id: 'badges',      label: 'Nishonlar',  icon: Award },
+  { id: 'leaderboard', label: 'Reyting',    icon: Trophy },
 ] as const
 
 type Tab = typeof TABS[number]['id']
 
-export default function Profile() {
+interface ProfileProps { onOpenAdmin: () => void }
+
+export default function Profile({ onOpenAdmin }: ProfileProps) {
   const [activeTab, setActiveTab] = useState<Tab>('reports')
   const myReports = SAMPLE_REPORTS.slice(0, 3)
 
@@ -76,7 +78,18 @@ export default function Profile() {
           </div>
 
           <div className="flex-1">
-            <h2 className="text-[19px] font-black text-white tracking-tight">Aziz Sultonov</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[19px] font-black text-white tracking-tight">Aziz Sultonov</h2>
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={onOpenAdmin}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg"
+                style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}
+              >
+                <Shield size={10} style={{ color: '#93C5FD' }} strokeWidth={2.5} />
+                <span className="text-[9px] font-bold" style={{ color: '#93C5FD' }}>Admin</span>
+              </motion.button>
+            </div>
             <p className="text-[11.5px] text-blue-200 mt-0.5">@aziz_toshkent · Faol fuqaro</p>
             <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
               <div
@@ -193,22 +206,22 @@ export default function Profile() {
       <div className="flex px-4 gap-1.5 shrink-0 mb-2">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id
+          const Icon = tab.icon
           return (
             <motion.button
               key={tab.id}
               whileTap={{ scale: 0.93 }}
               onClick={() => setActiveTab(tab.id)}
-              className="flex-1 py-2.5 rounded-2xl text-[11.5px] font-bold relative overflow-hidden transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[11.5px] font-bold transition-all"
               style={{
-                background: isActive
-                  ? 'linear-gradient(135deg, #3B82F6, #6366F1)'
-                  : 'rgba(255,255,255,0.8)',
+                background: isActive ? 'linear-gradient(135deg, #3B82F6, #6366F1)' : 'rgba(255,255,255,0.8)',
                 color: isActive ? '#fff' : '#94A3B8',
                 boxShadow: isActive ? '0 4px 14px rgba(99,102,241,0.3)' : '0 1px 4px rgba(15,23,42,0.05)',
-                border: isActive ? 'none' : '1px solid rgba(148,163,184,0.18)',
+                border: isActive ? 'none' : '1px solid rgba(226,232,240,0.8)',
               }}
             >
-              {tab.emoji} {tab.label}
+              <Icon size={13} strokeWidth={2.2} />
+              {tab.label}
             </motion.button>
           )
         })}

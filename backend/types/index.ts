@@ -40,3 +40,40 @@ export interface Category {
   color: string
   bg: string
 }
+
+export interface DailyStat {
+  date: string
+  reports: number
+  resolved: number
+}
+
+export interface CategoryStat {
+  id: string
+  label: string
+  color: string
+  count: number
+  resolved: number
+}
+
+export interface Analytics {
+  totalReports: number
+  resolvedCount: number
+  inProgressCount: number
+  pendingCount: number
+  resolvedPercent: number
+  avgResolutionDays: number
+  activeUsers: number
+  totalVotes: number
+  dailyStats: DailyStat[]
+  categoryStats: CategoryStat[]
+}
+
+export interface AdminReport extends Report {
+  district: string
+}
+
+export interface ApiResponse<T> {
+  data: T
+  ok: boolean
+  error?: string
+}
