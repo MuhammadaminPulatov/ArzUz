@@ -310,7 +310,7 @@ Admin panel subscribes to all events. Feed page subscribes to its current filter
 - **Premium plan (299 Stars/month or 2490 Stars/year):**
   - "Verified" badge on profile
   - Exclusive profile themes and badge frame
-  - Full ticket history (free = 30 days)
+  - Full ticket history always available to all users (no gate)
   - Priority display in feed (subtle sort boost)
   - Advanced personal stats
 
@@ -392,7 +392,7 @@ All existing pages preserved. Real API replaces mock calls.
 - Admin routes require `isAdmin: true` in JWT (manually whitelisted Telegram IDs in env)
 - Telegram `initData` validated server-side on every auth request (standard Telegram Mini App auth)
 - Photo uploads: only accepted via server-generated Vercel Blob signed upload URLs (prevents direct blob writes)
-- Rate limiting: 10 ticket creates per user per day (anti-spam, not a monetization gate)
+- Rate limiting: 5 ticket creates per user per hour (anti-abuse only — daily total uncapped, not a monetization gate)
 - Payment callbacks verified by provider signature
 
 ---
