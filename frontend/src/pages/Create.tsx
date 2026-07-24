@@ -8,6 +8,9 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { CATEGORIES } from '../data/mock'
+import { useGPS } from '../hooks/useGPS'
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder'
+import { fmtTime } from '../lib/utils'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -124,19 +127,18 @@ interface CreateProps {
 export default function Create({ onSuccess }: CreateProps) {
   const [step, setStep] = useState<Step>('photo')
   const [photo, setPhoto] = useState<string | null>(null)
-  const [pos, setPos] = useState<LatLng>({ lat: 41.2995, lng: 69.2401 })
-  const [address, setAddress] = useState('Toshkent sh., Chorsu bozori atrofi')
-  const [locating, setLocating] = useState(false)
   const [description, setDescription] = useState('')
-  const [isRecording, setIsRecording] = useState(false)
-  const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [aiResult, setAiResult] = useState<AIResult | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [descMode, setDescMode] = useState<'text' | 'voice'>('text')
 
+  const { pos, address, locating, handleGPS, setPos, setAddress } = useGPS()
+  const { isRecording, recordingSeconds, startRecording, stopRecording } = useVoiceRecorder(
+    (transcript) => setDescription(transcript)
+  )
+
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const stepIndex = STEP_ORDER.indexOf(step)
 
@@ -153,53 +155,6 @@ export default function Create({ onSuccess }: CreateProps) {
       setStep('location')
     }
     reader.readAsDataURL(file)
-  }
-
-  const handleGPS = () => {
-    setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      ({ coords: { latitude: lat, longitude: lng } }) => {
-        setPos({ lat, lng })
-        setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`)
-        setLocating(false)
-      },
-      () => setLocating(false),
-      { timeout: 8000 }
-    )
-  }
-
-  const startRecording = () => {
-    setIsRecording(true)
-    setRecordingSeconds(0)
-    timerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000)
-
-    // Try real Web Speech API
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition()
-      recognition.lang = 'uz-UZ'
-      recognition.continuous = true
-      recognition.interimResults = true
-      recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results).map((r: any) => r[0].transcript).join('')
-        setDescription(transcript)
-      }
-      recognition.start()
-      ;(window as any)._recognition = recognition
-    } else {
-      // Simulate
-      setTimeout(() => {
-        setDescription("Ko'chada katta muammo bor, tezda hal qilish kerak. Aholining ko'p qatlamiga ta'sir qilmoqda.")
-        stopRecording()
-      }, 4000)
-    }
-  }
-
-  const stopRecording = () => {
-    setIsRecording(false)
-    if (timerRef.current) clearInterval(timerRef.current)
-    const rec = (window as any)._recognition
-    if (rec) { try { rec.stop() } catch (_) {} }
   }
 
   const runAI = useCallback(() => {
@@ -231,7 +186,6 @@ export default function Create({ onSuccess }: CreateProps) {
     setAiLoading(false)
   }
 
-  const fmtTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
 
   if (submitted) return <SuccessScreen onReset={resetForm} />
 

@@ -1,3 +1,5 @@
+
+
 # Loyiha Qayta Tuzish Dizayni
 
 **Sana:** 2026-07-24  

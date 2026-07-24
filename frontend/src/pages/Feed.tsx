@@ -2,26 +2,16 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Bell, TrendingUp, X } from 'lucide-react'
 import ReportCard from '../components/ReportCard'
-import { SAMPLE_REPORTS, CATEGORIES, type Report } from '../data/mock'
+import { SAMPLE_REPORTS, CATEGORIES } from '../data/mock'
+import { useVote } from '../hooks/useVote'
 
 const FILTERS = ['Barchasi', 'Yuqori', "Jarayonda", 'Hal Etildi', 'Yaqinimda']
 
 export default function Feed() {
-  const [reports, setReports] = useState<Report[]>(SAMPLE_REPORTS)
+  const { reports, handleVote } = useVote(SAMPLE_REPORTS)
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState('Barchasi')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
-
-
-  const handleVote = (id: string) => {
-    setReports((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, hasVoted: !r.hasVoted, votes: r.hasVoted ? r.votes - 1 : r.votes + 1 }
-          : r
-      )
-    )
-  }
 
   const filtered = reports.filter((r) => {
     const matchSearch = search === '' ||
