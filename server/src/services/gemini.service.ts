@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { env } from '../config/env'
 
 export interface AIAnalysis {
@@ -15,50 +14,41 @@ const VALID_SEVS = ['low', 'medium', 'high']
 
 const PROMPT = `Sen Toshkent shahridagi mahalla muammolarini tahlil qiladigan AI yordamchisisan.
 Rasmga qarab muammoni aniqlang. FAQAT quyidagi JSON formatida javob bering, boshqa hech narsa yozmang:
-{
-  "category": "road|light|water|electric|trash|tree|building|other",
-  "severity": "low|medium|high",
-  "aiTitle": "O'zbekcha qisqa sarlavha (max 60 ta belgi)",
-  "aiDescription": "O'zbekcha batafsil tavsif 2-3 gapdan iborat",
-  "department": "Mas'ul bo'lim nomi o'zbekcha",
-  "confidence": 85
-}
+{"category":"road|light|water|electric|trash|tree|building|other","severity":"low|medium|high","aiTitle":"O'zbekcha sarlavha max 60 belgi","aiDescription":"O'zbekcha batafsil tavsif 2-3 gap","department":"Mas'ul bo'lim o'zbekcha","confidence":85}
 
-Kategoriyalar:
-- road: yo'l chuqurlari, asfalt zararlangan, piyoda yo'li singan
-- light: ko'cha chiroqlari, yoritish muammosi
-- water: suv quvuri oqishi, sel, kanalizatsiya
-- electric: elektr infratuzilma muammosi
-- trash: axlat, chiqindi boshqarish
-- tree: yiqilgan daraxtlar, haddan ziyod o'simlik
-- building: bino yoki inshoot zararlangan
-- other: boshqa muammo
-
-Mas'ul bo'limlar:
-- road → "Yo'l xo'jaligi boshqarmasi"
-- light → "Kommunal xizmatlar bo'limi"
-- water → "Suv ta'minoti xizmati"
-- electric → "Elektr ta'minoti bo'limi"
-- trash → "Sanitariya va atrof-muhit bo'limi"
-- tree → "Bog'-park xo'jaligi"
-- building → "Uy-joy xo'jaligi bo'limi"
-- other → "Mahalla inspeksiyasi"
-
+Kategoriyalar: road=yo'l muammosi, light=chiroq, water=suv, electric=elektr, trash=axlat, tree=daraxt, building=bino, other=boshqa
+Mas'ul bo'limlar: road=Yo'l xo'jaligi boshqarmasi, light=Kommunal xizmatlar bo'limi, water=Suv ta'minoti xizmati, electric=Elektr ta'minoti bo'limi, trash=Sanitariya va atrof-muhit bo'limi, tree=Bog'-park xo'jaligi, building=Uy-joy xo'jaligi bo'limi, other=Mahalla inspeksiyasi
 Og'irlik: high=xavfli, medium=o'rta, low=kichik`
 
 export async function analyzePhoto(imageBuffer: Buffer, mimeType: string): Promise<AIAnalysis | null> {
   if (!env.geminiKey) return null
 
   try {
-    const genAI = new GoogleGenerativeAI(env.geminiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.geminiKey}`
 
-    const result = await model.generateContent([
-      PROMPT,
-      { inlineData: { data: imageBuffer.toString('base64'), mimeType } },
-    ])
+    const body = {
+      contents: [{
+        parts: [
+          { text: PROMPT },
+          { inline_data: { mime_type: mimeType, data: imageBuffer.toString('base64') } },
+        ],
+      }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 512 },
+    }
 
-    const text = result.response.text().trim()
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) return null
+
+    const data = await res.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    }
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return null
 
