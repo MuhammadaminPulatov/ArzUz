@@ -77,3 +77,24 @@ export interface ApiResponse<T> {
   ok: boolean
   error?: string
 }
+
+export interface Notification {
+  id: string
+  reportId: string
+  reportTitle: string
+  message: string
+  type: 'resolved' | 'in_progress' | 'comment'
+  read: boolean
+  createdAt: string
+}
+
+export interface District {
+  id: string
+  name: string
+  lat: number
+  lng: number
+  total: number
+  byCategory: Record<string, number>
+  dominant: string
+  dominantColor: string
+}
