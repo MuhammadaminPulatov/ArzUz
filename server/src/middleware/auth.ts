@@ -8,12 +8,6 @@ export interface AuthUser {
   isAdmin: boolean
 }
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: AuthUser
-  }
-}
-
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   const header = req.headers['authorization']
   if (!header?.startsWith('Bearer ')) {
@@ -22,7 +16,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
   try {
     const payload = jwt.verify(header.slice(7), env.jwtSecret) as AuthUser
-    req.user = payload
+    ;(req as any).user = payload
     next()
   } catch {
     res.status(401).json({ ok: false, error: 'Invalid token' })
