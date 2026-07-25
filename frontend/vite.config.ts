@@ -3,7 +3,11 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
-import siteConfiguration from '../.figma/make/site.json'
+const siteConfiguration = {
+  "description": "Easily report municipal and infrastructure issues in Uzbekistan with a user-friendly interface, allowing quick photo uploads and GPS location sharing.",
+  "robots": { "index": false },
+  "accessibility": { "addBypassLinks": false }
+}
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
