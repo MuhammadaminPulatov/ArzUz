@@ -4,7 +4,7 @@ import {
   Camera, RotateCcw, MapPin, Mic, MicOff, FileText,
   CheckCircle2, Send, ChevronLeft, AlertCircle, Loader2,
   Tag, Lightbulb, Image as ImageIcon, Edit3, Sparkles,
-  Building2, Zap,
+  Building2, Zap, Brain,
 } from 'lucide-react'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
@@ -30,6 +30,15 @@ const pinIcon = L.divIcon({
     </svg></div>`,
   className: '', iconSize: [28, 36], iconAnchor: [14, 36],
 })
+
+interface AIResult {
+  category: string
+  severity: 'low' | 'medium' | 'high'
+  aiTitle: string
+  aiDescription: string
+  department: string
+  confidence: number
+}
 
 type Step = 'photo' | 'location' | 'description' | 'format' | 'confirm'
 
@@ -106,6 +115,8 @@ export default function Create({ onSuccess }: CreateProps) {
   const [photo, setPhoto] = useState<string | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadMsg, setUploadMsg] = useState('Yuklanmoqda...')
+  const [aiResult, setAiResult] = useState<AIResult | null>(null)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -133,19 +144,38 @@ export default function Create({ onSuccess }: CreateProps) {
     if (transcript) setDescription(transcript)
   }, [transcript])
 
+  // Cycle upload message: Yuklanmoqda → AI tahlil qilmoqda
+  useEffect(() => {
+    if (!uploading) { setUploadMsg('Yuklanmoqda...'); return }
+    const t = setTimeout(() => setUploadMsg('AI tahlil qilmoqda...'), 2200)
+    return () => clearTimeout(t)
+  }, [uploading])
+
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    // Preview locally
     const reader = new FileReader()
     reader.onload = ev => setPhoto(ev.target?.result as string)
     reader.readAsDataURL(file)
-    // Upload to server immediately
     setUploading(true)
+    setAiResult(null)
     const form = new FormData()
     form.append('photo', file)
-    api.upload<{ url: string }>('/upload', form)
-      .then(({ url }) => setPhotoUrl(url))
+    api.upload<{ url: string; thumbnailUrl: string; ai: AIResult | null }>('/upload', form)
+      .then(({ url, ai }) => {
+        setPhotoUrl(url)
+        if (ai) {
+          setAiResult(ai)
+          const matched = CATEGORIES.find(c => c.id === ai.category)
+          if (matched) setSelectedCategoryId(matched.id)
+          if (ai.aiTitle) setTitle(ai.aiTitle)
+          if (ai.aiDescription) {
+            setDescription(ai.aiDescription)
+            setFormattedDesc(ai.aiDescription)
+          }
+          setSeverity(ai.severity)
+        }
+      })
       .catch(() => setPhotoUrl(null))
       .finally(() => setUploading(false))
   }
@@ -155,6 +185,11 @@ export default function Create({ onSuccess }: CreateProps) {
   const runFormat = useCallback(() => {
     if (!selectedCategory) return
     setStep('format')
+    // If AI already produced a formatted description, show it immediately
+    if (aiResult && formattedDesc.trim()) {
+      setFormatting(false)
+      return
+    }
     setFormatting(true)
     const raw = description || title
     const formatted = formatText(raw, selectedCategory.label)
@@ -164,7 +199,7 @@ export default function Create({ onSuccess }: CreateProps) {
       setSeverity(sev)
       setFormatting(false)
     }, 1100)
-  }, [description, title, selectedCategory])
+  }, [description, title, selectedCategory, aiResult, formattedDesc])
 
   const handleSubmit = async () => {
     if (!selectedCategory) return
@@ -199,6 +234,7 @@ export default function Create({ onSuccess }: CreateProps) {
     setStep('photo')
     setPhoto(null)
     setPhotoUrl(null)
+    setAiResult(null)
     setSelectedCategoryId(null)
     setTitle('')
     setDescription('')
@@ -276,19 +312,34 @@ export default function Create({ onSuccess }: CreateProps) {
                   <img src={photo} alt="" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                   {uploading ? (
-                    <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2" style={{ background: 'rgba(0,0,0,0.55)' }}>
                       <Loader2 size={28} className="text-white animate-spin" />
-                      <span className="ml-2 text-white text-[12px] font-semibold">Yuklanmoqda...</span>
+                      <AnimatePresence mode="wait">
+                        <motion.span key={uploadMsg} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                          className="text-white text-[12px] font-semibold flex items-center gap-1.5">
+                          {uploadMsg.includes('AI') && <Brain size={12} className="text-purple-300" />}
+                          {uploadMsg}
+                        </motion.span>
+                      </AnimatePresence>
                     </div>
                   ) : (
                     <>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setPhoto(null); setPhotoUrl(null) }}
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setPhoto(null); setPhotoUrl(null); setAiResult(null) }}
                         className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-white text-[11px] font-semibold"
                         style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)' }}>
                         <RotateCcw size={11} strokeWidth={2.5} /> Qayta
                       </motion.button>
-                      <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-white text-[11px] font-medium">
-                        <CheckCircle2 size={12} className="text-emerald-400" strokeWidth={2.5} /> Rasm tayyor
+                      <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
+                        {aiResult ? (
+                          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold"
+                            style={{ background: 'rgba(139,92,246,0.85)', backdropFilter: 'blur(8px)', color: '#fff' }}>
+                            <Brain size={11} strokeWidth={2} /> AI tahlil qilindi · {aiResult.confidence}%
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 text-white text-[11px] font-medium">
+                            <CheckCircle2 size={12} className="text-emerald-400" strokeWidth={2.5} /> Rasm tayyor
+                          </span>
+                        )}
                       </div>
                     </>
                   )}
@@ -318,10 +369,16 @@ export default function Create({ onSuccess }: CreateProps) {
 
               {/* Category */}
               <div className="mb-4">
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <Tag size={13} strokeWidth={2.5} style={{ color: '#3B82F6' }} />
                   <p className="text-[13px] font-bold" style={{ color: '#0F172A' }}>Muammo turini tanlang</p>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(239,68,68,0.1)', color: '#DC2626' }}>Majburiy</span>
+                  {aiResult ? (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(139,92,246,0.1)', color: '#7C3AED' }}>
+                      <Brain size={9} strokeWidth={2.5} /> AI tanladi
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(239,68,68,0.1)', color: '#DC2626' }}>Majburiy</span>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {CATEGORIES.map(cat => {
@@ -521,6 +578,19 @@ export default function Create({ onSuccess }: CreateProps) {
                 </div>
               ) : (
                 <>
+                  {/* AI or manual badge */}
+                  {aiResult && (
+                    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-2xl"
+                      style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.15)' }}>
+                      <Brain size={14} strokeWidth={2} style={{ color: '#7C3AED' }} />
+                      <div className="flex-1">
+                        <p className="text-[12px] font-bold" style={{ color: '#7C3AED' }}>Gemini AI tahlil qildi</p>
+                        <p className="text-[10px]" style={{ color: '#94A3B8' }}>Ishonch darajasi: {aiResult.confidence}% · O'zgartirishingiz mumkin</p>
+                      </div>
+                    </motion.div>
+                  )}
+
                   {/* Severity badge */}
                   <div className="flex items-center gap-2 mb-3">
                     <AlertCircle size={14} strokeWidth={2.5} style={{ color: SEV_COLOR[severity] }} />
