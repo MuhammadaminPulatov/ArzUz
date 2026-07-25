@@ -70,7 +70,7 @@ ticketsRouter.post('/', authMiddleware, createLimiter, async (req: Request, res:
     userNote?: string
   }
 
-  if (!body.photoUrl || !body.lat || !body.lng || !body.address) {
+  if (!body.lat || !body.lng || !body.address) {
     res.status(400).json({ ok: false, error: 'Missing required fields' })
     return
   }
