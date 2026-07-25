@@ -12,7 +12,7 @@ export const ticketsRouter = Router()
 const createLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
-  keyGenerator: (req) => req.user?.telegramId ?? req.ip ?? 'unknown',
+  keyGenerator: (req) => (req as any).user?.telegramId ?? req.ip ?? 'unknown',
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, error: 'Too many tickets, try again later' },
@@ -52,7 +52,7 @@ ticketsRouter.get('/:id', async (req: Request, res: Response) => {
 
 // POST /api/tickets
 ticketsRouter.post('/', authMiddleware, createLimiter, async (req: Request, res: Response) => {
-  const user = req.user!
+  const user = (req as any).user!
   const body = req.body as {
     photoUrl: string
     photoThumbnailUrl: string
@@ -109,7 +109,7 @@ ticketsRouter.post('/', authMiddleware, createLimiter, async (req: Request, res:
 
 // POST /api/tickets/:id/vote
 ticketsRouter.post('/:id/vote', authMiddleware, async (req: Request, res: Response) => {
-  const user = req.user!
+  const user = (req as any).user!
   const existing = await Ticket.findById(req.params['id'])
   if (!existing) {
     res.status(404).json({ ok: false, error: 'Ticket not found' })

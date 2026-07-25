@@ -97,12 +97,12 @@ authRouter.post('/telegram', async (req: Request, res: Response) => {
 
 // GET /api/auth/me
 authRouter.get('/me', authMiddleware, async (req: Request, res: Response) => {
-  const user = await User.findOne({ telegramId: req.user!.telegramId }).lean()
+  const user = await User.findOne({ telegramId: (req as any).user!.telegramId }).lean()
   if (!user) {
     res.status(404).json({ ok: false, error: 'User not found' })
     return
   }
-  const tickets = await Ticket.find({ userId: req.user!.telegramId })
+  const tickets = await Ticket.find({ userId: (req as any).user!.telegramId })
     .sort({ createdAt: -1 })
     .limit(20)
 
