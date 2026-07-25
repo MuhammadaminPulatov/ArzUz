@@ -105,7 +105,6 @@ authRouter.get('/me', authMiddleware, async (req: Request, res: Response) => {
   const tickets = await Ticket.find({ userId: req.user!.telegramId })
     .sort({ createdAt: -1 })
     .limit(20)
-    .lean()
 
   res.json({ ok: true, data: { ...user, tickets } })
 })

@@ -33,7 +33,7 @@ ticketsRouter.get('/', async (req: Request, res: Response) => {
   if (status)   filter['status'] = status
 
   const [tickets, total] = await Promise.all([
-    Ticket.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    Ticket.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Ticket.countDocuments(filter),
   ])
 
@@ -42,7 +42,7 @@ ticketsRouter.get('/', async (req: Request, res: Response) => {
 
 // GET /api/tickets/:id
 ticketsRouter.get('/:id', async (req: Request, res: Response) => {
-  const ticket = await Ticket.findById(req.params['id']).lean()
+  const ticket = await Ticket.findById(req.params['id'])
   if (!ticket) {
     res.status(404).json({ ok: false, error: 'Ticket not found' })
     return

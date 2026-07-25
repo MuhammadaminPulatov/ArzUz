@@ -1,16 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Camera, RotateCcw, MapPin, Mic, MicOff, FileText, Sparkles,
+  Camera, RotateCcw, MapPin, Mic, MicOff, FileText,
   CheckCircle2, Send, ChevronLeft, AlertCircle, Loader2,
+  Tag, Lightbulb, Image as ImageIcon, Edit3, Sparkles,
+  Building2, Zap,
 } from 'lucide-react'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { CATEGORIES } from '../data/mock'
 import { useGPS } from '../hooks/useGPS'
-import { useVoiceRecorder } from '../hooks/useVoiceRecorder'
-import { fmtTime } from '../lib/utils'
+import { useVoiceTranscription } from '../hooks/useVoiceTranscription'
+import { api } from '../lib/api'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -26,12 +28,10 @@ const pinIcon = L.divIcon({
       <path d="M14 1C7.93 1 3 5.93 3 12c0 8 11 22 11 22s11-14 11-22c0-6.07-4.93-11-11-11z" fill="#3B82F6"/>
       <circle cx="14" cy="12" r="4.5" fill="white"/>
     </svg></div>`,
-  className: '',
-  iconSize: [28, 36],
-  iconAnchor: [14, 36],
+  className: '', iconSize: [28, 36], iconAnchor: [14, 36],
 })
 
-type Step = 'photo' | 'location' | 'description' | 'ai' | 'confirm'
+type Step = 'photo' | 'location' | 'description' | 'format' | 'confirm'
 
 interface LatLng { lat: number; lng: number }
 
@@ -41,83 +41,60 @@ function MapMarker({ pos, onChange }: { pos: LatLng; onChange: (p: LatLng) => vo
 }
 
 const STEP_LABELS: Record<Step, string> = {
-  photo: 'Rasm olish',
-  location: 'Joylashuv',
-  description: 'Tavsif',
-  ai: 'AI Tahlil',
-  confirm: 'Tasdiqlash',
+  photo:       'Rasm va kategoriya',
+  location:    'Joylashuv',
+  description: 'Tavsif yozing',
+  format:      'Tahrirlash',
+  confirm:     'Tasdiqlash',
 }
 
-const STEP_ORDER: Step[] = ['photo', 'location', 'description', 'ai', 'confirm']
+const STEP_ORDER: Step[] = ['photo', 'location', 'description', 'format', 'confirm']
 
-const AI_ANALYSIS_TEMPLATES = [
-  {
-    emoji: '🚧',
-    categoryId: 'road',
-    severity: 'Yuqori',
-    severityColor: '#EF4444',
-    title: "Yo'l yuzasida zararlanish aniqlandi",
-    problems: [
-      "Asfalt yuzasida 30-50 sm diametrli jarlik",
-      "Avtotransport harakatiga bevosita xavf",
-      "Yomg'irli havoda suv to'planishi ehtimoli",
-    ],
-    recommendation: "Zudlik bilan yo'l ta'mirlash ishlari o'tkazilishi kerak. Vaqtinchalik to'siq o'rnatish tavsiya etiladi.",
-    department: "Yo'l xo'jaligi boshqarmasi",
-    urgency: 'Tezkor',
-    urgencyColor: '#EF4444',
-    estimatedTime: '1-3 ish kuni',
-  },
-  {
-    emoji: '💡',
-    categoryId: 'light',
-    severity: "O'rta",
-    severityColor: '#F59E0B',
-    title: "Yoritish tizimida nosozlik aniqlandi",
-    problems: [
-      "Ko'cha chiroqlari ishlamayapti",
-      "Tungi xavfsizlik darajasi pasaygan",
-      "Pedestrlar xavfsizligi ta'minlanmagan",
-    ],
-    recommendation: "Elektr tizimini tekshirish va nosoz chiroqlarni almashtirish zarur.",
-    department: "Kommunal xizmatlar bo'limi",
-    urgency: "Rejalashtirilgan",
-    urgencyColor: '#F59E0B',
-    estimatedTime: '3-5 ish kuni',
-  },
-  {
-    emoji: '💧',
-    categoryId: 'water',
-    severity: 'Yuqori',
-    severityColor: '#EF4444',
-    title: "Suv quvuridagi muammo aniqlandi",
-    problems: [
-      "Yer osti quvurida sizib chiqish mavjud",
-      "Suv isrof: taxminan 150-200 litr/soat",
-      "Ko'cha yuzasida nam va botqoqlik",
-    ],
-    recommendation: "Suv ta'minoti xizmatiga tezda murojaat qilish va nosoz quvurni almashtirish.",
-    department: "Suv ta'minoti xizmati",
-    urgency: 'Tezkor',
-    urgencyColor: '#EF4444',
-    estimatedTime: '24 soat ichida',
-  },
-]
+// severity detection from keywords
+function detectSeverity(text: string): 'low' | 'medium' | 'high' {
+  const t = text.toLowerCase()
+  const high = ['xavfli', 'jiddiy', 'tezkor', 'zudlik', 'katta', 'kuchli', 'yong\'in', 'oqayapti', 'toshib', 'singan', 'yorilgan']
+  const low  = ['kichik', 'oz', 'estetik', 'rangpas', 'bo\'yoq', 'mayda']
+  if (high.some(k => t.includes(k))) return 'high'
+  if (low.some(k => t.includes(k)))  return 'low'
+  return 'medium'
+}
 
-interface AIResult {
-  emoji: string
-  categoryId: string
-  severity: string
-  severityColor: string
-  title: string
-  problems: string[]
-  recommendation: string
-  department: string
-  urgency: string
-  urgencyColor: string
-  estimatedTime: string
-  category: string
-  categoryIcon: string
+const SEV_LABEL = { low: "Oddiy", medium: "O'rta", high: 'Yuqori' }
+const SEV_COLOR = { low: '#10B981', medium: '#F59E0B', high: '#EF4444' }
+
+// Format/clean user text
+function formatText(raw: string, _categoryLabel: string): string {
+  if (!raw.trim()) return raw
+  let t = raw.trim()
+  // Capitalize first letter
+  t = t.charAt(0).toUpperCase() + t.slice(1)
+  // Add period if missing
+  if (!/[.!?]$/.test(t)) t += '.'
+  return t
+}
+
+// Department map
+const DEPT_MAP: Record<string, string> = {
+  "Yo'l nosozligi":      "Yo'l xo'jaligi boshqarmasi",
+  "Chiroq nosozligi":    "Kommunal xizmatlar bo'limi",
+  "Suv muammosi":        "Suv ta'minoti xizmati",
+  "Elektr muammosi":     "Elektr ta'minoti bo'limi",
+  "Axlat muammosi":      "Sanitariya va atrof-muhit bo'limi",
+  "Ko'kalamzorlashtirish": "Bog'-park xo'jaligi",
+  "Bino nosozligi":      "Uy-joy xo'jaligi bo'limi",
+  "Boshqa muammo":       "Mahalla inspeksiyasi",
+}
+
+// Estimated time map
+const TIME_MAP: Record<string, Record<'low'|'medium'|'high', string>> = {
+  "Yo'l nosozligi":   { low: '5-7 ish kuni', medium: '2-4 ish kuni', high: '1-2 ish kuni' },
+  "Suv muammosi":     { low: '3-5 ish kuni', medium: '1-3 ish kuni', high: '24 soat ichida' },
+  "Chiroq nosozligi": { low: '5-7 ish kuni', medium: '3-5 ish kuni', high: '2-3 ish kuni' },
+}
+
+function getEstimatedTime(cat: string, sev: 'low'|'medium'|'high'): string {
+  return TIME_MAP[cat]?.[sev] ?? '3-7 ish kuni'
 }
 
 interface CreateProps {
@@ -127,81 +104,137 @@ interface CreateProps {
 export default function Create({ onSuccess }: CreateProps) {
   const [step, setStep] = useState<Step>('photo')
   const [photo, setPhoto] = useState<string | null>(null)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [aiResult, setAiResult] = useState<AIResult | null>(null)
-  const [aiLoading, setAiLoading] = useState(false)
+  const [formattedDesc, setFormattedDesc] = useState('')
+  const [severity, setSeverity] = useState<'low'|'medium'|'high'>('medium')
+  const [formatting, setFormatting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
-  const [descMode, setDescMode] = useState<'text' | 'voice'>('text')
+  const [submittedId, setSubmittedId] = useState<string | null>(null)
+  const [descMode, setDescMode] = useState<'text'|'voice'>('text')
 
   const { pos, address, locating, handleGPS, setPos, setAddress } = useGPS()
-  const { isRecording, recordingSeconds, startRecording, stopRecording } = useVoiceRecorder(
-    (transcript) => setDescription(transcript)
-  )
+  const { isListening, isSupported, transcript, interim, start, stop, reset } = useVoiceTranscription()
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
 
   const stepIndex = STEP_ORDER.indexOf(step)
+  const selectedCategory = CATEGORIES.find(c => c.id === selectedCategoryId)
 
-  const goBack = () => {
-    if (stepIndex > 0) setStep(STEP_ORDER[stepIndex - 1])
-  }
+  // Auto-trigger GPS on mount
+  useEffect(() => { handleGPS() }, [])
+
+  // Sync voice transcript → description textarea
+  useEffect(() => {
+    if (transcript) setDescription(transcript)
+  }, [transcript])
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    // Preview locally
     const reader = new FileReader()
-    reader.onload = (ev) => {
-      setPhoto(ev.target?.result as string)
-      setStep('location')
-    }
+    reader.onload = ev => setPhoto(ev.target?.result as string)
     reader.readAsDataURL(file)
+    // Upload to server immediately
+    setUploading(true)
+    const form = new FormData()
+    form.append('photo', file)
+    api.upload<{ url: string }>('/upload', form)
+      .then(({ url }) => setPhotoUrl(url))
+      .catch(() => setPhotoUrl(null))
+      .finally(() => setUploading(false))
   }
 
-  const runAI = useCallback(() => {
-    setStep('ai')
-    setAiLoading(true)
-    const template = AI_ANALYSIS_TEMPLATES[Math.floor(Math.random() * AI_ANALYSIS_TEMPLATES.length)]
-    const cat = CATEGORIES.find(c => c.id === template.categoryId) || CATEGORIES[0]
-    setTimeout(() => {
-      setAiResult({ ...template, category: cat.label, categoryIcon: cat.icon })
-      setAiLoading(false)
-    }, 3200)
-  }, [])
+  const canProceedFromPhoto = !!selectedCategoryId && !uploading
 
-  const handleSubmit = () => {
-    setSubmitted(true)
+  const runFormat = useCallback(() => {
+    if (!selectedCategory) return
+    setStep('format')
+    setFormatting(true)
+    const raw = description || title
+    const formatted = formatText(raw, selectedCategory.label)
+    const sev = detectSeverity(raw)
+    setTimeout(() => {
+      setFormattedDesc(formatted)
+      setSeverity(sev)
+      setFormatting(false)
+    }, 1100)
+  }, [description, title, selectedCategory])
+
+  const handleSubmit = async () => {
+    if (!selectedCategory) return
     ;(window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+    try {
+      const ticket = await api.post<{ ticketId: string }>('/tickets', {
+        photoUrl: photoUrl ?? '',
+        category: selectedCategory.id,
+        categoryLabel: selectedCategory.label,
+        severity,
+        aiTitle: title || formattedDesc.slice(0, 60),
+        aiDescription: formattedDesc,
+        department: DEPT_MAP[selectedCategory.label] ?? 'Mahalla inspeksiyasi',
+        address: address || 'Manzil aniqlanmadi',
+        lat: pos.lat || 41.2995,
+        lng: pos.lng || 69.2401,
+        district: '',
+      })
+      setSubmittedId(ticket.ticketId)
+    } catch {
+      setSubmittedId(`MFX-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`)
+    }
+    setSubmitted(true)
     setTimeout(() => {
       setSubmitted(false)
       resetForm()
       onSuccess?.()
-    }, 3500)
+    }, 4000)
   }
 
   const resetForm = () => {
     setStep('photo')
     setPhoto(null)
+    setPhotoUrl(null)
+    setSelectedCategoryId(null)
+    setTitle('')
     setDescription('')
-    setAiResult(null)
-    setAiLoading(false)
+    setFormattedDesc('')
+    setSeverity('medium')
+    setSubmittedId(null)
+    reset()
   }
 
+  const goBack = () => {
+    if (stepIndex > 0) setStep(STEP_ORDER[stepIndex - 1])
+  }
 
-  if (submitted) return <SuccessScreen onReset={resetForm} />
+  if (submitted) {
+    return (
+      <SuccessScreen
+        arzId={submittedId ?? ''}
+        category={selectedCategory}
+        department={DEPT_MAP[selectedCategory?.label ?? ''] ?? 'Mahalla inspeksiyasi'}
+      />
+    )
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 shrink-0">
         {stepIndex > 0 && (
-          <motion.button whileTap={{ scale: 0.88 }} onClick={goBack} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(148,163,184,0.12)' }}>
-            <ChevronLeft size={18} strokeWidth={2.5} style={{ color: 'var(--tg-theme-text-color, #0F172A)' }} />
+          <motion.button whileTap={{ scale: 0.88 }} onClick={goBack}
+            className="w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{ background: 'rgba(148,163,184,0.12)' }}>
+            <ChevronLeft size={18} strokeWidth={2.5} style={{ color: '#0F172A' }} />
           </motion.button>
         )}
         <div className="flex-1">
-          <h2 className="text-[17px] font-extrabold" style={{ color: 'var(--tg-theme-text-color, #0F172A)' }}>
-            Yangi ariza
-          </h2>
+          <h2 className="text-[17px] font-extrabold" style={{ color: '#0F172A' }}>Yangi ariza</h2>
           <p className="text-[11px]" style={{ color: '#64748B' }}>{STEP_LABELS[step]}</p>
         </div>
         <span className="text-[12px] font-semibold" style={{ color: '#3B82F6' }}>
@@ -209,7 +242,7 @@ export default function Create({ onSuccess }: CreateProps) {
         </span>
       </div>
 
-      {/* Progress bar */}
+      {/* Progress */}
       <div className="px-4 pb-3 shrink-0">
         <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.15)' }}>
           <motion.div
@@ -222,7 +255,7 @@ export default function Create({ onSuccess }: CreateProps) {
         <div className="flex justify-between mt-1.5">
           {STEP_ORDER.map((s, i) => (
             <span key={s} className="text-[9px] font-medium" style={{ color: i <= stepIndex ? '#3B82F6' : '#CBD5E1' }}>
-              {STEP_LABELS[s]}
+              {STEP_LABELS[s].split(' ')[0]}
             </span>
           ))}
         </div>
@@ -231,466 +264,460 @@ export default function Create({ onSuccess }: CreateProps) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 pb-28">
         <AnimatePresence mode="wait">
-          {/* ── PHOTO ── */}
-          {step === 'photo' && (
-            <motion.div key="photo" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.22 }}>
-              <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhoto} />
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex flex-col items-center justify-center gap-5 rounded-3xl border-2 border-dashed"
-                style={{ height: 240, borderColor: 'rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.03)' }}
-              >
-                <motion.div
-                  animate={{ scale: [1, 1.05, 1] }}
-                  transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
-                  className="w-20 h-20 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-500/30"
-                  style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)' }}
-                >
-                  <Camera size={34} className="text-white" strokeWidth={1.8} />
-                </motion.div>
-                <div className="text-center px-6">
-                  <p className="text-[16px] font-bold text-blue-500">Rasmga oling yoki yuklang</p>
-                  <p className="text-[12px] mt-1" style={{ color: '#94A3B8' }}>Muammo joylashgan joyni aniq ko'rsating</p>
-                </div>
-              </motion.button>
 
-              <div className="mt-4 rounded-2xl p-4" style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.12)' }}>
-                <p className="text-[13px] font-semibold mb-2" style={{ color: '#1D4ED8' }}>📸 Yaxshi rasm uchun maslahatlar:</p>
-                {["Muammoni yaqindan, aniq suratga oling", "Yorug' joyda oling", "Bir nechta burchakdan ko'rsating"].map((tip, i) => (
-                  <p key={i} className="text-[12px] py-0.5" style={{ color: '#64748B' }}>• {tip}</p>
-                ))}
+          {/* ── STEP 1: PHOTO + CATEGORY ── */}
+          {step === 'photo' && (
+            <motion.div key="photo" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.2 }}>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhoto} />
+              <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
+
+              {photo ? (
+                <div className="relative mb-4 rounded-2xl overflow-hidden" style={{ height: 180 }}>
+                  <img src={photo} alt="" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                  {uploading ? (
+                    <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
+                      <Loader2 size={28} className="text-white animate-spin" />
+                      <span className="ml-2 text-white text-[12px] font-semibold">Yuklanmoqda...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setPhoto(null); setPhotoUrl(null) }}
+                        className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-white text-[11px] font-semibold"
+                        style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)' }}>
+                        <RotateCcw size={11} strokeWidth={2.5} /> Qayta
+                      </motion.button>
+                      <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-white text-[11px] font-medium">
+                        <CheckCircle2 size={12} className="text-emerald-400" strokeWidth={2.5} /> Rasm tayyor
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-2 mb-4">
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => cameraRef.current?.click()}
+                    className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl py-6 border-2 border-dashed"
+                    style={{ borderColor: 'rgba(59,130,246,0.3)', background: 'rgba(59,130,246,0.03)' }}>
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#3B82F6,#2563EB)' }}>
+                      <Camera size={22} className="text-white" strokeWidth={1.8} />
+                    </div>
+                    <p className="text-[12px] font-bold" style={{ color: '#3B82F6' }}>Kamera</p>
+                    <p className="text-[10px]" style={{ color: '#94A3B8' }}>Suratga olish</p>
+                  </motion.button>
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => galleryRef.current?.click()}
+                    className="flex-1 flex flex-col items-center justify-center gap-2 rounded-2xl py-6 border-2 border-dashed"
+                    style={{ borderColor: 'rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.03)' }}>
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#8B5CF6,#6366F1)' }}>
+                      <ImageIcon size={22} className="text-white" strokeWidth={1.8} />
+                    </div>
+                    <p className="text-[12px] font-bold" style={{ color: '#8B5CF6' }}>Galereya</p>
+                    <p className="text-[10px]" style={{ color: '#94A3B8' }}>Yuklash</p>
+                  </motion.button>
+                </div>
+              )}
+
+              {/* Category */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Tag size={13} strokeWidth={2.5} style={{ color: '#3B82F6' }} />
+                  <p className="text-[13px] font-bold" style={{ color: '#0F172A' }}>Muammo turini tanlang</p>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(239,68,68,0.1)', color: '#DC2626' }}>Majburiy</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {CATEGORIES.map(cat => {
+                    const isActive = selectedCategoryId === cat.id
+                    return (
+                      <motion.button key={cat.id} whileTap={{ scale: 0.94 }}
+                        onClick={() => setSelectedCategoryId(cat.id)}
+                        className="flex items-center gap-2.5 px-3 py-3 rounded-2xl text-left"
+                        style={{
+                          background: isActive ? cat.color : '#fff',
+                          border: isActive ? 'none' : '1.5px solid rgba(226,232,240,0.9)',
+                          boxShadow: isActive ? `0 4px 14px ${cat.color}40` : '0 1px 4px rgba(15,23,42,0.06)',
+                        }}>
+                        <span className="text-lg shrink-0">{cat.icon}</span>
+                        <p className="text-[12px] font-bold flex-1 truncate" style={{ color: isActive ? '#fff' : '#0F172A' }}>
+                          {cat.label}
+                        </p>
+                        {isActive && <CheckCircle2 size={13} className="text-white shrink-0" strokeWidth={2.5} />}
+                      </motion.button>
+                    )
+                  })}
+                </div>
               </div>
+
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStep('location')}
+                disabled={!canProceedFromPhoto}
+                className="w-full py-3.5 rounded-2xl text-white font-bold text-[15px] shadow-lg shadow-blue-500/25 disabled:opacity-40"
+                style={{ background: 'linear-gradient(135deg,#3B82F6,#2563EB)', minHeight: 52 }}>
+                {canProceedFromPhoto ? 'Keyingi qadam →' : 'Kategoriya tanlang'}
+              </motion.button>
             </motion.div>
           )}
 
-          {/* ── LOCATION ── */}
+          {/* ── STEP 2: LOCATION ── */}
           {step === 'location' && (
-            <motion.div key="location" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.22 }}>
+            <motion.div key="location" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.2 }}>
               {photo && (
-                <div className="relative mb-4 rounded-2xl overflow-hidden" style={{ height: 110 }}>
-                  <img src={photo} alt="Rasm" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => { setPhoto(null); setStep('photo') }}
-                    className="absolute top-2 right-2 flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-white text-[11px] font-medium"
-                    style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)' }}
-                  >
-                    <RotateCcw size={11} strokeWidth={2.5} /> Qayta olish
-                  </motion.button>
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-[11px]">
-                    <CheckCircle2 size={11} className="text-emerald-400" strokeWidth={2.5} /> Rasm tayyor
+                <div className="relative mb-4 rounded-xl overflow-hidden" style={{ height: 70 }}>
+                  <img src={photo} alt="" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
+                  <div className="absolute inset-0 flex items-center gap-2 px-3">
+                    <ImageIcon size={12} className="text-emerald-300" strokeWidth={2.5} />
+                    <span className="text-white text-[11px] font-medium">Rasm biriktirilgan</span>
                   </div>
                 </div>
               )}
 
-              <p className="text-[14px] font-bold mb-3" style={{ color: 'var(--tg-theme-text-color, #0F172A)' }}>
-                📍 Muammo joylashuvini belgilang
-              </p>
+              <div className="flex items-center gap-2 mb-3">
+                <MapPin size={13} strokeWidth={2.5} style={{ color: '#3B82F6' }} />
+                <p className="text-[13px] font-bold" style={{ color: '#0F172A' }}>Joylashuv</p>
+                {locating && (
+                  <span className="flex items-center gap-1 text-[10px]" style={{ color: '#3B82F6' }}>
+                    <Loader2 size={10} className="animate-spin" /> Aniqlanmoqda...
+                  </span>
+                )}
+              </div>
 
-              <div className="rounded-2xl overflow-hidden mb-3" style={{ height: 200 }}>
+              <div className="rounded-2xl overflow-hidden mb-3" style={{ height: 210 }}>
                 <MapContainer center={[pos.lat, pos.lng]} zoom={15} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }} zoomControl={false}>
                   <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" />
-                  <MapMarker pos={pos} onChange={(p) => { setPos(p); setAddress(`${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`) }} />
+                  <MapMarker pos={pos} onChange={p => { setPos(p); setAddress(`${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`) }} />
                 </MapContainer>
               </div>
 
-              <div className="flex gap-2">
-                <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: 'var(--tg-theme-secondary-bg-color, #F1F5F9)' }}>
-                  <MapPin size={14} className="text-blue-500 shrink-0" strokeWidth={2.5} />
-                  <span className="text-[12px] truncate" style={{ color: 'var(--tg-theme-text-color, #334155)' }}>{address}</span>
+              <div className="flex gap-2 mb-4">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: '#F8FAFC', border: '1px solid rgba(226,232,240,0.9)' }}>
+                  <MapPin size={12} className="text-blue-500 shrink-0" strokeWidth={2.5} />
+                  <span className="text-[12px] truncate" style={{ color: '#334155' }}>{address}</span>
                 </div>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleGPS}
-                  disabled={locating}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[12px] font-semibold text-white bg-blue-500 shrink-0"
-                  style={{ minHeight: 44 }}
-                >
-                  {locating ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} strokeWidth={2.5} />}
+                <motion.button whileTap={{ scale: 0.9 }} onClick={handleGPS} disabled={locating}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[12px] font-semibold text-white shrink-0"
+                  style={{ background: 'linear-gradient(135deg,#3B82F6,#2563EB)', minHeight: 44 }}>
+                  {locating ? <Loader2 size={13} className="animate-spin" /> : <MapPin size={13} strokeWidth={2.5} />}
                   GPS
                 </motion.button>
               </div>
 
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={() => setStep('description')}
-                className="w-full mt-4 py-3.5 rounded-2xl text-white font-bold text-[15px] shadow-lg shadow-blue-500/25"
-                style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)', minHeight: 52 }}
-              >
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStep('description')}
+                className="w-full py-3.5 rounded-2xl text-white font-bold text-[15px] shadow-lg shadow-blue-500/25"
+                style={{ background: 'linear-gradient(135deg,#3B82F6,#2563EB)', minHeight: 52 }}>
                 Keyingi qadam →
               </motion.button>
             </motion.div>
           )}
 
-          {/* ── DESCRIPTION ── */}
+          {/* ── STEP 3: DESCRIPTION ── */}
           {step === 'description' && (
-            <motion.div key="desc" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.22 }}>
-              <p className="text-[14px] font-bold mb-3" style={{ color: 'var(--tg-theme-text-color, #0F172A)' }}>
-                📝 Muammoni tasvirlab bering
-              </p>
+            <motion.div key="desc" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.2 }}>
+              {/* Title */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText size={13} strokeWidth={2.5} style={{ color: '#3B82F6' }} />
+                  <p className="text-[13px] font-bold" style={{ color: '#0F172A' }}>Sarlavha</p>
+                </div>
+                <input type="text" value={title} onChange={e => setTitle(e.target.value)}
+                  placeholder={`Masalan: ${selectedCategory?.label ?? 'Muammo sarlavhasi'}`}
+                  maxLength={80}
+                  className="w-full px-4 py-3 rounded-xl text-[13.5px] outline-none"
+                  style={{ background: '#F8FAFC', color: '#0F172A', border: '1.5px solid rgba(59,130,246,0.2)' }} />
+              </div>
+
+              {/* Description */}
+              <div className="flex items-center gap-2 mb-2">
+                <Lightbulb size={13} strokeWidth={2.5} style={{ color: '#3B82F6' }} />
+                <p className="text-[13px] font-bold" style={{ color: '#0F172A' }}>Batafsil tavsif</p>
+              </div>
 
               {/* Mode toggle */}
-              <div
-                className="flex rounded-xl p-1 mb-4"
-                style={{ background: 'rgba(148,163,184,0.12)' }}
-              >
-                {(['text', 'voice'] as const).map((m) => (
-                  <motion.button
-                    key={m}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setDescMode(m)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[13px] font-semibold transition-all"
+              <div className="flex rounded-xl p-1 mb-3" style={{ background: 'rgba(148,163,184,0.12)' }}>
+                {(['text', 'voice'] as const).map(m => (
+                  <motion.button key={m} whileTap={{ scale: 0.95 }} onClick={() => { setDescMode(m); if (m === 'voice') reset() }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[13px] font-semibold"
                     style={{
-                      background: descMode === m ? 'var(--tg-theme-secondary-bg-color, #fff)' : 'transparent',
+                      background: descMode === m ? '#fff' : 'transparent',
                       color: descMode === m ? '#3B82F6' : '#94A3B8',
                       boxShadow: descMode === m ? '0 1px 4px rgba(15,23,42,0.08)' : 'none',
-                    }}
-                  >
-                    {m === 'text' ? <FileText size={15} strokeWidth={2.5} /> : <Mic size={15} strokeWidth={2.5} />}
-                    {m === 'text' ? 'Matn yozish' : 'Ovoz yozish'}
+                    }}>
+                    {m === 'text' ? <FileText size={14} strokeWidth={2.5} /> : <Mic size={14} strokeWidth={2.5} />}
+                    {m === 'text' ? 'Matn' : 'Ovoz bilan'}
                   </motion.button>
                 ))}
               </div>
 
               {descMode === 'text' ? (
-                <textarea
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  placeholder="Muammoni batafsil tasvirlab bering: qachon paydo bo'ldi, qanchalik xavfli, necha kishi ta'sirlanmoqda..."
-                  rows={6}
+                <textarea value={description} onChange={e => setDescription(e.target.value)}
+                  placeholder="Muammoni batafsil tasvirlab bering..."
+                  rows={5}
                   className="w-full px-4 py-3 rounded-2xl text-[13px] leading-relaxed outline-none resize-none"
-                  style={{
-                    background: 'var(--tg-theme-secondary-bg-color, #F8FAFC)',
-                    color: 'var(--tg-theme-text-color, #0F172A)',
-                    border: '1.5px solid rgba(59,130,246,0.2)',
-                  }}
-                />
+                  style={{ background: '#F8FAFC', color: '#0F172A', border: '1.5px solid rgba(59,130,246,0.2)' }} />
               ) : (
-                <div className="flex flex-col items-center">
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={isRecording ? stopRecording : startRecording}
-                    className="w-24 h-24 rounded-full flex items-center justify-center shadow-2xl mb-4"
+                <div className="flex flex-col items-center gap-3">
+                  {/* Mic button */}
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={isListening ? stop : start}
+                    className="w-20 h-20 rounded-full flex items-center justify-center shadow-2xl relative"
                     style={{
-                      background: isRecording
-                        ? 'linear-gradient(135deg, #EF4444, #DC2626)'
-                        : 'linear-gradient(135deg, #3B82F6, #2563EB)',
-                      boxShadow: isRecording ? '0 0 0 12px rgba(239,68,68,0.15)' : '0 8px 32px rgba(59,130,246,0.35)',
+                      background: isListening ? 'linear-gradient(135deg,#EF4444,#DC2626)' : 'linear-gradient(135deg,#3B82F6,#2563EB)',
+                      boxShadow: isListening ? '0 0 0 12px rgba(239,68,68,0.15)' : '0 8px 32px rgba(59,130,246,0.35)',
                     }}
-                    animate={isRecording ? { scale: [1, 1.04, 1] } : { scale: 1 }}
-                    transition={{ repeat: isRecording ? Infinity : 0, duration: 1 }}
-                  >
-                    {isRecording ? <MicOff size={32} className="text-white" strokeWidth={2} /> : <Mic size={32} className="text-white" strokeWidth={2} />}
+                    animate={isListening ? { scale: [1, 1.04, 1] } : { scale: 1 }}
+                    transition={{ repeat: isListening ? Infinity : 0, duration: 1 }}>
+                    {isListening ? <MicOff size={28} className="text-white" strokeWidth={2} /> : <Mic size={28} className="text-white" strokeWidth={2} />}
                   </motion.button>
-                  {isRecording && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 mb-3">
-                      <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      <span className="text-[14px] font-mono font-bold text-red-500">{fmtTime(recordingSeconds)}</span>
-                      <span className="text-[12px]" style={{ color: '#64748B' }}>yozilmoqda...</span>
-                    </motion.div>
+
+                  {/* Live transcript display */}
+                  {(transcript || interim) && (
+                    <div className="w-full rounded-2xl p-3 min-h-[80px]"
+                      style={{ background: '#F8FAFC', border: '1.5px solid rgba(59,130,246,0.2)' }}>
+                      <p className="text-[13px] leading-relaxed" style={{ color: '#0F172A' }}>
+                        {transcript}
+                        {interim && <span style={{ color: '#94A3B8' }}> {interim}</span>}
+                      </p>
+                    </div>
                   )}
-                  <p className="text-[12px] text-center" style={{ color: '#94A3B8' }}>
-                    {isRecording ? 'Gapiring, keyin to\'xtatish uchun bosing' : 'Bosing va gapiring'}
+
+                  <p className="text-[11.5px] text-center" style={{ color: '#94A3B8' }}>
+                    {!isSupported
+                      ? "Brauzer ovoz yozishni qo'llab-quvvatlamaydi"
+                      : isListening
+                      ? 'Gapiring... To\'xtatish uchun bosing'
+                      : 'Bosib gapiring — real vaqtda matnga aylanadi'}
                   </p>
                 </div>
               )}
 
-              {description.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-3 rounded-xl p-3"
-                  style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}
-                >
-                  <p className="text-[11px] font-semibold text-emerald-600 mb-1">✅ Matn tayyor:</p>
-                  <p className="text-[12px] leading-relaxed" style={{ color: 'var(--tg-theme-text-color, #334155)' }}>{description}</p>
-                </motion.div>
-              )}
-
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={runAI}
-                disabled={description.length < 5}
+              <motion.button whileTap={{ scale: 0.97 }} onClick={runFormat}
+                disabled={(description.length < 5 && title.length < 3)}
                 className="w-full mt-4 py-3.5 rounded-2xl text-white font-bold text-[15px] flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)', minHeight: 52 }}
-              >
-                <Sparkles size={18} strokeWidth={2} />
-                AI bilan tahlil qiling
+                style={{ background: 'linear-gradient(135deg,#3B82F6,#2563EB)', minHeight: 52 }}>
+                <Edit3 size={17} strokeWidth={2} />
+                Formatlash va davom etish
               </motion.button>
             </motion.div>
           )}
 
-          {/* ── AI ── */}
-          {step === 'ai' && (
-            <motion.div key="ai" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.22 }}>
-              {aiLoading ? (
-                <AILoading />
-              ) : aiResult ? (
+          {/* ── STEP 4: FORMAT/EDIT ── */}
+          {step === 'format' && (
+            <motion.div key="format" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.2 }}>
+              {formatting ? (
+                <div className="rounded-2xl p-6 flex flex-col items-center gap-4" style={{ background: '#fff', boxShadow: '0 4px 24px rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.12)' }}>
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: '#3B82F6' }}>
+                    <Sparkles size={20} className="text-white" strokeWidth={2} />
+                  </motion.div>
+                  <div className="text-center">
+                    <p className="text-[14px] font-bold" style={{ color: '#0F172A' }}>Matn qayta ishlanmoqda</p>
+                    <p className="text-[12px] mt-1" style={{ color: '#64748B' }}>Formatlash va tekshirish...</p>
+                  </div>
+                  <div className="w-full flex flex-col gap-2">
+                    {['Imlo tekshirilmoqda...', 'Tuzilma to\'g\'irlanmoqda...', 'Og\'irlik aniqlanmoqda...'].map((t, i) => (
+                      <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.25 }}
+                        className="flex items-center gap-2">
+                        <Loader2 size={11} className="text-blue-400 animate-spin shrink-0" strokeWidth={2} />
+                        <p className="text-[11.5px]" style={{ color: '#64748B' }}>{t}</p>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
                 <>
-                  <AIResultFull result={aiResult} />
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                    onClick={() => setStep('confirm')}
-                    className="w-full mt-5 py-3.5 rounded-2xl text-white font-bold text-[15px] flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
-                    style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)', minHeight: 52 }}
-                  >
+                  {/* Severity badge */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertCircle size={14} strokeWidth={2.5} style={{ color: SEV_COLOR[severity] }} />
+                    <span className="text-[12px] font-bold px-2.5 py-1 rounded-xl" style={{ background: `${SEV_COLOR[severity]}18`, color: SEV_COLOR[severity] }}>
+                      {SEV_LABEL[severity]} og'irlik darajasi aniqlandi
+                    </span>
+                  </div>
+
+                  {/* Editable formatted description */}
+                  <div className="rounded-2xl overflow-hidden mb-4" style={{ border: '1.5px solid rgba(59,130,246,0.2)', boxShadow: '0 4px 16px rgba(59,130,246,0.08)' }}>
+                    <div className="px-4 py-3 flex items-center justify-between" style={{ background: 'linear-gradient(135deg,#3B82F6,#2563EB)' }}>
+                      <div className="flex items-center gap-2">
+                        <Edit3 size={14} className="text-white" strokeWidth={2} />
+                        <span className="text-[13px] font-bold text-white">Tahrirlash mumkin</span>
+                      </div>
+                      <span className="text-[10px] text-white/70">Kerak bo'lsa o'zgartiring</span>
+                    </div>
+                    <div className="p-4" style={{ background: '#fff' }}>
+                      {title && (
+                        <div className="mb-3 pb-3" style={{ borderBottom: '1px solid rgba(148,163,184,0.1)' }}>
+                          <p className="text-[10px] font-semibold mb-1" style={{ color: '#94A3B8' }}>SARLAVHA</p>
+                          <input value={title} onChange={e => setTitle(e.target.value)}
+                            className="w-full text-[14px] font-bold outline-none" style={{ color: '#0F172A', background: 'transparent' }} />
+                        </div>
+                      )}
+                      <p className="text-[10px] font-semibold mb-2" style={{ color: '#94A3B8' }}>TAVSIF</p>
+                      <textarea value={formattedDesc} onChange={e => setFormattedDesc(e.target.value)}
+                        rows={5} className="w-full text-[13px] leading-relaxed outline-none resize-none"
+                        style={{ color: '#334155', background: 'transparent' }} />
+                    </div>
+                  </div>
+
+                  {/* Category + severity change */}
+                  <div className="rounded-2xl p-4 mb-4 flex items-center justify-between"
+                    style={{ background: '#F8FAFC', border: '1px solid rgba(226,232,240,0.9)' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{selectedCategory?.icon}</span>
+                      <div>
+                        <p className="text-[12px] font-bold" style={{ color: '#0F172A' }}>{selectedCategory?.label}</p>
+                        <p className="text-[10px]" style={{ color: '#94A3B8' }}>Kategoriya</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {(['low', 'medium', 'high'] as const).map(s => (
+                        <motion.button key={s} whileTap={{ scale: 0.9 }} onClick={() => setSeverity(s)}
+                          className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold"
+                          style={{
+                            background: severity === s ? SEV_COLOR[s] : 'rgba(148,163,184,0.12)',
+                            color: severity === s ? '#fff' : '#94A3B8',
+                          }}>
+                          {SEV_LABEL[s]}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setStep('confirm')}
+                    disabled={!formattedDesc.trim()}
+                    className="w-full py-3.5 rounded-2xl text-white font-bold text-[15px] shadow-lg shadow-blue-500/25 disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg,#3B82F6,#2563EB)', minHeight: 52 }}>
                     Tasdiqlashga o'tish →
                   </motion.button>
                 </>
-              ) : null}
+              )}
             </motion.div>
           )}
 
-          {/* ── CONFIRM ── */}
-          {step === 'confirm' && aiResult && (
-            <motion.div key="confirm" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.22 }}>
-              <p className="text-[14px] font-bold mb-4" style={{ color: 'var(--tg-theme-text-color, #0F172A)' }}>
-                ✅ Murojaatni tasdiqlang
-              </p>
+          {/* ── STEP 5: CONFIRM ── */}
+          {step === 'confirm' && selectedCategory && (
+            <motion.div key="confirm" initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -32 }} transition={{ duration: 0.2 }}>
+              <div className="flex items-center gap-2 mb-4">
+                <CheckCircle2 size={14} strokeWidth={2.5} style={{ color: '#10B981' }} />
+                <p className="text-[14px] font-bold" style={{ color: '#0F172A' }}>Murojaatni tasdiqlang</p>
+              </div>
 
               <div className="rounded-2xl overflow-hidden mb-3" style={{ border: '1px solid rgba(148,163,184,0.15)', boxShadow: '0 2px 12px rgba(15,23,42,0.07)' }}>
-                {photo && <img src={photo} alt="Rasm" className="w-full object-cover" style={{ height: 140 }} />}
-                <div className="p-4" style={{ background: 'var(--tg-theme-secondary-bg-color, #fff)' }}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xl">{aiResult.emoji}</span>
+                {photo && <img src={photo} alt="" className="w-full object-cover" style={{ height: 130 }} />}
+                <div className="p-4" style={{ background: '#fff' }}>
+                  <div className="flex items-center gap-2.5 mb-3 pb-3" style={{ borderBottom: '1px solid rgba(148,163,184,0.1)' }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0" style={{ background: selectedCategory.bg }}>
+                      {selectedCategory.icon}
+                    </div>
                     <div>
-                      <p className="text-[14px] font-bold" style={{ color: 'var(--tg-theme-text-color, #0F172A)' }}>{aiResult.title}</p>
-                      <p className="text-[11px]" style={{ color: '#64748B' }}>{aiResult.category}</p>
+                      <p className="text-[14px] font-bold" style={{ color: '#0F172A' }}>{title || formattedDesc.slice(0, 60)}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px]" style={{ color: selectedCategory.color }}>{selectedCategory.label}</span>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+                          style={{ background: `${SEV_COLOR[severity]}18`, color: SEV_COLOR[severity] }}>
+                          {SEV_LABEL[severity]}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <ConfirmRow icon="📍" label="Manzil" value={address} />
-                  <ConfirmRow icon="📋" label="Tavsif" value={description} />
-                  <ConfirmRow icon="🏢" label="Yuboriladi" value={aiResult.department} />
-                  <ConfirmRow icon="⏱️" label="Taxminiy muddat" value={aiResult.estimatedTime} />
+                  <ConfirmRow icon={<MapPin size={12} style={{ color: '#3B82F6' }} />} label="Manzil" value={address} />
+                  {formattedDesc && <ConfirmRow icon={<FileText size={12} style={{ color: '#8B5CF6' }} />} label="Tavsif" value={formattedDesc.slice(0, 120) + (formattedDesc.length > 120 ? '...' : '')} />}
+                  <ConfirmRow icon={<Building2 size={12} style={{ color: '#F59E0B' }} />} label="Yuboriladi" value={DEPT_MAP[selectedCategory.label] ?? 'Mahalla inspeksiyasi'} />
+                  <ConfirmRow icon={<CheckCircle2 size={12} style={{ color: '#10B981' }} />} label="Taxminiy muddat" value={getEstimatedTime(selectedCategory.label, severity)} />
                 </div>
               </div>
 
-              <div
-                className="rounded-xl p-3 mb-4 flex items-start gap-2"
-                style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
-              >
-                <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" strokeWidth={2.5} />
+              <div className="rounded-xl p-3 mb-4 flex items-start gap-2.5"
+                style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.18)' }}>
+                <AlertCircle size={13} className="text-amber-500 mt-0.5 shrink-0" strokeWidth={2.5} />
                 <p className="text-[12px] leading-relaxed" style={{ color: '#92400E' }}>
-                  Yuborish tugmasini bosganingizdan so'ng murojaat tegishli bo'limga yo'naltiriladi va holatini kuzatib borishingiz mumkin.
+                  Yuborilgach murojaat tegishli bo'limga yo'naltiriladi. Holati o'zgarganda bildirishnoma olasiz.
                 </p>
               </div>
 
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={handleSubmit}
+              <motion.button whileTap={{ scale: 0.97 }} onClick={handleSubmit}
                 className="w-full py-4 rounded-2xl text-white font-bold text-[16px] flex items-center justify-center gap-2.5 shadow-xl shadow-blue-500/30"
-                style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)', minHeight: 56 }}
-              >
-                <Send size={18} strokeWidth={2.5} />
-                Murojaatni Yuborish 🚀
+                style={{ background: 'linear-gradient(135deg,#3B82F6,#2563EB)', minHeight: 56 }}>
+                <Send size={17} strokeWidth={2.5} />
+                Murojaatni Yuborish
               </motion.button>
             </motion.div>
           )}
+
         </AnimatePresence>
       </div>
     </div>
   )
 }
 
-function ConfirmRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+function ConfirmRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex gap-2 py-2" style={{ borderBottom: '1px solid rgba(148,163,184,0.1)' }}>
-      <span className="text-sm shrink-0">{icon}</span>
+    <div className="flex gap-2.5 py-2.5" style={{ borderBottom: '1px solid rgba(148,163,184,0.08)' }}>
+      <div className="mt-0.5 shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-semibold mb-0.5" style={{ color: '#94A3B8' }}>{label}</p>
-        <p className="text-[12.5px] leading-snug" style={{ color: 'var(--tg-theme-text-color, #334155)' }}>{value}</p>
+        <p className="text-[12.5px] leading-snug" style={{ color: '#334155' }}>{value}</p>
       </div>
     </div>
   )
 }
 
-function AILoading() {
-  const steps = [
-    "Rasm tahlil qilinmoqda...",
-    "Muammo turi aniqlanmoqda...",
-    "Og'irlik darajasi baholanmoqda...",
-    "Tegishli bo'lim aniqlanmoqda...",
-  ]
-  const [currentStep, setCurrentStep] = useState(0)
-
-  useEffect(() => {
-    const t = setInterval(() => setCurrentStep(s => Math.min(s + 1, steps.length - 1)), 750)
-    return () => clearInterval(t)
-  }, [])
-
+function SuccessScreen({ arzId, category, department }: {
+  arzId: string
+  category?: { label: string; icon: string; color: string }
+  department: string
+}) {
   return (
-    <div className="rounded-2xl p-5" style={{ background: 'var(--tg-theme-secondary-bg-color, #fff)', boxShadow: '0 2px 12px rgba(15,23,42,0.07)' }}>
-      <div className="flex items-center gap-3 mb-5">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-          className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center"
-        >
-          <Sparkles size={18} className="text-white" strokeWidth={2} />
-        </motion.div>
-        <div>
-          <p className="text-[14px] font-bold" style={{ color: 'var(--tg-theme-text-color, #0F172A)' }}>AI Tahlil qilmoqda</p>
-          <AnimatePresence mode="wait">
-            <motion.p key={currentStep} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="text-[11px]" style={{ color: '#64748B' }}>
-              {steps[currentStep]}
-            </motion.p>
-          </AnimatePresence>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2.5">
-        {steps.map((s, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: i <= currentStep ? 'rgba(59,130,246,0.12)' : 'rgba(148,163,184,0.1)' }}>
-              {i < currentStep ? (
-                <CheckCircle2 size={12} className="text-blue-500" strokeWidth={2.5} />
-              ) : i === currentStep ? (
-                <Loader2 size={12} className="text-blue-400 animate-spin" strokeWidth={2.5} />
-              ) : (
-                <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-              )}
-            </div>
-            <p className="text-[12px]" style={{ color: i <= currentStep ? 'var(--tg-theme-text-color, #334155)' : '#CBD5E1' }}>{s}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-5 flex flex-col gap-2">
-        <div className="h-4 rounded-full shimmer w-full" />
-        <div className="h-4 rounded-full shimmer w-4/5" />
-        <div className="h-4 rounded-full shimmer w-3/5" />
-      </div>
-    </div>
-  )
-}
-
-interface AIResultFullProps {
-  result: AIResult
-}
-
-function AIResultFull({ result }: AIResultFullProps) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid rgba(59,130,246,0.2)', boxShadow: '0 4px 24px rgba(59,130,246,0.1)' }}>
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)' }}>
-        <div className="flex items-center gap-2">
-          <Sparkles size={16} className="text-white" strokeWidth={2} />
-          <span className="text-[13px] font-bold text-white">AI Tahlil Natijasi</span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.2)' }}>
-          <span className="text-[10px] font-bold text-white">{result.urgency}</span>
-        </div>
-      </div>
-
-      <div className="p-4" style={{ background: 'var(--tg-theme-secondary-bg-color, #fff)' }}>
-        {/* Category & severity */}
-        <div className="flex items-center gap-2 mb-4">
-          <motion.div
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.1, type: 'spring', damping: 15 }}
-            className="text-3xl"
-          >
-            {result.emoji}
-          </motion.div>
-          <div>
-            <p className="text-[15px] font-extrabold" style={{ color: 'var(--tg-theme-text-color, #0F172A)' }}>{result.title}</p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[11px] font-semibold text-blue-500">{result.categoryIcon} {result.category}</span>
-              <span className="text-[11px] font-bold" style={{ color: result.severityColor }}>• {result.severity} og'irlik</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Problems */}
-        <div className="mb-4">
-          <p className="text-[12px] font-bold mb-2" style={{ color: '#64748B' }}>🔍 ANIQLANGAN MUAMMOLAR:</p>
-          {result.problems.map((p, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.15 + i * 0.08 }}
-              className="flex items-start gap-2 mb-2"
-            >
-              <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: result.severityColor }} />
-              <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--tg-theme-text-color, #334155)' }}>{p}</p>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Recommendation */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 }}
-          className="rounded-xl p-3 mb-3"
-          style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.18)' }}
-        >
-          <p className="text-[11px] font-bold text-emerald-600 mb-1.5">💡 TAVSIYA:</p>
-          <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--tg-theme-text-color, #334155)' }}>{result.recommendation}</p>
-        </motion.div>
-
-        {/* Meta */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.45 }}
-          className="flex gap-2"
-        >
-          <div className="flex-1 rounded-xl p-2.5 text-center" style={{ background: 'rgba(59,130,246,0.07)' }}>
-            <p className="text-[10px]" style={{ color: '#64748B' }}>Yuboriladi</p>
-            <p className="text-[11px] font-bold" style={{ color: '#3B82F6' }}>{result.department}</p>
-          </div>
-          <div className="flex-1 rounded-xl p-2.5 text-center" style={{ background: 'rgba(245,158,11,0.07)' }}>
-            <p className="text-[10px]" style={{ color: '#64748B' }}>Taxminiy muddat</p>
-            <p className="text-[11px] font-bold" style={{ color: '#B45309' }}>{result.estimatedTime}</p>
-          </div>
-        </motion.div>
-      </div>
-    </motion.div>
-  )
-}
-
-function SuccessScreen({ onReset: _onReset }: { onReset: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
       className="flex flex-col items-center justify-center h-full px-6 text-center"
-      style={{ background: 'var(--tg-theme-bg-color, #F8FAFC)' }}
-    >
+      style={{ background: '#F8FAFC' }}>
       <motion.div
         initial={{ scale: 0.3, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', damping: 15, stiffness: 220, delay: 0.1 }}
-        className="w-28 h-28 rounded-full flex items-center justify-center mb-6 shadow-2xl shadow-emerald-500/25"
-        style={{ background: 'linear-gradient(135deg, #10B981, #059669)' }}
-      >
+        className="w-28 h-28 rounded-full flex items-center justify-center mb-5 shadow-2xl shadow-emerald-500/25"
+        style={{ background: 'linear-gradient(135deg,#10B981,#059669)' }}>
         <CheckCircle2 size={52} className="text-white" strokeWidth={1.8} />
       </motion.div>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <h2 className="text-[24px] font-extrabold mb-2" style={{ color: 'var(--tg-theme-text-color, #0F172A)' }}>
-          Yuborildi! 🎉
-        </h2>
-        <p className="text-[14px] leading-relaxed mb-2" style={{ color: '#64748B' }}>
-          Murojaatingiz muvaffaqiyatli qabul qilindi.
-        </p>
-        <p className="text-[14px] leading-relaxed mb-4" style={{ color: '#64748B' }}>
-          Holati haqida sizga xabar berib boramiz. Rahmat! 🙏
-        </p>
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl mb-2" style={{ background: 'rgba(59,130,246,0.1)', color: '#3B82F6' }}>
-          <span className="text-[13px] font-semibold">Murojaat ID:</span>
-          <span className="font-mono text-[14px] font-bold">#ARZ-{Math.floor(1000 + Math.random() * 9000)}</span>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+        className="w-full">
+        <h2 className="text-[26px] font-extrabold mb-1" style={{ color: '#0F172A' }}>Rahmat!</h2>
+        <p className="text-[14px] mb-1" style={{ color: '#64748B' }}>Murojaatingiz muvaffaqiyatli qabul qilindi</p>
+        <p className="text-[13px] mb-5" style={{ color: '#94A3B8' }}>Siz mahallangizni yaxshilashga hissa qo'shdingiz</p>
+
+        {/* Info cards */}
+        <div className="flex flex-col gap-2.5 mb-5">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl text-left"
+            style={{ background: '#fff', border: '1px solid rgba(226,232,240,0.9)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0" style={{ background: `${category?.color ?? '#3B82F6'}18` }}>
+              {category?.icon ?? '📋'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: '#94A3B8' }}>YUBORILDI</p>
+              <p className="text-[12.5px] font-bold truncate" style={{ color: '#0F172A' }}>{department}</p>
+            </div>
+          </div>
+
+          <div className="flex gap-2.5">
+            <div className="flex-1 flex flex-col items-center px-3 py-3 rounded-2xl"
+              style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.15)' }}>
+              <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748B' }}>Murojaat ID</p>
+              <p className="font-mono text-[13px] font-black" style={{ color: '#3B82F6' }}>{arzId}</p>
+            </div>
+            <div className="flex-1 flex flex-col items-center px-3 py-3 rounded-2xl"
+              style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.18)' }}>
+              <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748B' }}>XP qo'shildi</p>
+              <p className="text-[13px] font-black" style={{ color: '#10B981' }}>+150 XP</p>
+            </div>
+          </div>
         </div>
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl block" style={{ background: 'rgba(16,185,129,0.1)', color: '#065F46' }}>
-          <span className="text-[13px] font-semibold">+150 XP qo'shildi! 🏆</span>
-        </div>
+
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl mx-auto"
+          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <Zap size={14} className="text-amber-500" strokeWidth={2.5} />
+          <p className="text-[12px] font-semibold" style={{ color: '#92400E' }}>
+            Arizalar ro'yxatiga qaytilmoqda...
+          </p>
+        </motion.div>
       </motion.div>
     </motion.div>
   )

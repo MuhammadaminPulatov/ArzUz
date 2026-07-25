@@ -56,7 +56,19 @@ const ticketSchema = new mongoose.Schema<TicketDoc>(
     channelMessageId:  { type: Number },
     resolvedAt:        { type: Date },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform(_doc, ret: Record<string, unknown>) {
+        ret['id'] = (ret['_id'] as { toString(): string } | undefined)?.toString()
+        ret['title'] = ret['aiTitle'] || ret['categoryLabel'] || ''
+        ret['description'] = ret['aiDescription'] || ret['userNote'] || ''
+        delete ret['_id']
+        delete ret['__v']
+      },
+    },
+  },
 )
 
 export const Ticket = mongoose.model<TicketDoc>('Ticket', ticketSchema)

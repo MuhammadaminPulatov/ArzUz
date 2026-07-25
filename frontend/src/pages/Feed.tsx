@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Bell, X, ThumbsUp, CheckCircle2, Zap, SlidersHorizontal } from 'lucide-react'
 import ReportCard from '../components/ReportCard'
+import NotificationDrawer from '../components/NotificationDrawer'
+import ReportDetailModal from '../components/ReportDetailModal'
 import { CATEGORIES } from '../data/mock'
 import { useReports } from '../hooks/useReports'
 import { useVote } from '../hooks/useVote'
+import { useNotifications } from '../hooks/useNotifications'
+import { useSSE } from '../hooks/useSSE'
+import { getToken } from '../lib/api'
+import type { Report } from '../types'
 
 const STATUS_FILTERS = [
   { id: 'all',         label: 'Barchasi',   dot: '' },
@@ -21,12 +27,29 @@ const STAT_CONFIGS = [
 ]
 
 export default function Feed() {
-  const { reports: rawReports, loading } = useReports()
+  const { reports: rawReports, loading, addReport, updateReport } = useReports()
   const { reports, handleVote } = useVote(rawReports)
+  const { notifications, unread } = useNotifications()
+  const sse = useSSE(getToken())
+
+  useEffect(() => {
+    const unCreated = sse.on('ticket:created', (data) => addReport(data as Report))
+    const unUpdated = sse.on('ticket:updated', (data) => {
+      const d = data as { ticketId: string; status: Report['status'] }
+      updateReport(d.ticketId, { status: d.status })
+    })
+    const unVoted = sse.on('ticket:voted', (data) => {
+      const d = data as { ticketId: string; votes: number }
+      updateReport(d.ticketId, { votes: d.votes })
+    })
+    return () => { unCreated(); unUpdated(); unVoted() }
+  }, [sse, addReport, updateReport])
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState('all')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [searchFocused, setSearchFocused] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null)
 
   const filtered = reports.filter((r) => {
     const matchSearch =
@@ -50,7 +73,17 @@ export default function Feed() {
   const statValues = [totalVotes, resolvedCount, inProgressCount]
 
   return (
-    <div className="flex flex-col h-full overflow-hidden" style={{ background: '#F0F4FF' }}>
+    <div className="flex flex-col h-full overflow-hidden relative" style={{ background: '#F0F4FF' }}>
+      <NotificationDrawer
+        open={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        notifications={notifications}
+      />
+      <ReportDetailModal
+        report={selectedReport}
+        onClose={() => setSelectedReport(null)}
+        onVote={(id) => { handleVote(id); setSelectedReport(r => r?.id === id ? { ...r, hasVoted: !r.hasVoted, votes: r.hasVoted ? r.votes - 1 : r.votes + 1 } : r) }}
+      />
 
       {/* Header */}
       <div className="px-4 pt-4 pb-0 shrink-0">
@@ -66,11 +99,22 @@ export default function Feed() {
           </div>
           <motion.button
             whileTap={{ scale: 0.88 }}
+            onClick={() => setShowNotifications(true)}
             className="relative w-10 h-10 rounded-2xl flex items-center justify-center"
             style={{ background: 'rgba(255,255,255,0.9)', boxShadow: '0 2px 12px rgba(15,23,42,0.1)', border: '1px solid rgba(226,232,240,0.6)' }}
           >
             <Bell size={17} style={{ color: '#3B82F6' }} strokeWidth={2.2} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full border-2 border-white" style={{ background: '#EF4444' }} />
+            {unread > 0 && (
+              <motion.span
+                key={unread}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-black text-white"
+                style={{ background: '#EF4444' }}
+              >
+                {unread}
+              </motion.span>
+            )}
           </motion.button>
         </div>
 
@@ -229,6 +273,8 @@ export default function Feed() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ delay: i * 0.05, duration: 0.25 }}
+                  onClick={() => setSelectedReport(reports.find(r => r.id === report.id) ?? report)}
+                  style={{ cursor: 'pointer' }}
                 >
                   <ReportCard report={report} onVote={handleVote} />
                 </motion.div>

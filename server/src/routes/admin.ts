@@ -21,7 +21,7 @@ adminRouter.get('/tickets', async (req: Request, res: Response) => {
   if (priority) filter['priority'] = priority
 
   const [tickets, total] = await Promise.all([
-    Ticket.find(filter).sort({ priority: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    Ticket.find(filter).sort({ priority: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Ticket.countDocuments(filter),
   ])
 

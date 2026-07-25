@@ -1,21 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Report } from '../types'
-import { getReports } from '@backend/services/reports.service'
+import { api } from '../lib/api'
+
+interface TicketsResponse {
+  tickets: Report[]
+  total: number
+}
 
 export function useReports() {
   const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getReports().then((data) => {
-      setReports(data)
-      setLoading(false)
-    })
+    api.get<TicketsResponse>('/tickets')
+      .then(({ tickets }) => setReports(tickets))
+      .catch(() => setReports([]))
+      .finally(() => setLoading(false))
   }, [])
 
-  const updateReport = (id: string, patch: Partial<Report>) => {
-    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
-  }
+  const addReport = useCallback((r: Report) => {
+    setReports((prev) => [r, ...prev])
+  }, [])
 
-  return { reports, setReports, loading, updateReport }
+  const updateReport = useCallback((id: string, patch: Partial<Report>) => {
+    setReports((prev) => prev.map((r) => (r.id === id || r.id === id ? { ...r, ...patch } : r)))
+  }, [])
+
+  return { reports, setReports, loading, addReport, updateReport }
 }

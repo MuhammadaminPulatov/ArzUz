@@ -5,6 +5,8 @@ import Feed from './pages/Feed'
 import Create from './pages/Create'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
+import { useAuth } from './hooks/useAuth'
+import { useSSE } from './hooks/useSSE'
 
 export type Tab = 'feed' | 'create' | 'profile'
 
@@ -13,14 +15,26 @@ export default function App() {
   const [prevTab, setPrevTab] = useState<Tab>('feed')
   const [showAdmin, setShowAdmin] = useState(false)
 
+  const { token, loading: authLoading } = useAuth()
+  useSSE(token)
+
   useEffect(() => {
-    const tg = (window as any).Telegram?.WebApp
+    const tg = (window as { Telegram?: { WebApp?: { expand?: () => void; ready?: () => void; setBackgroundColor?: (c: string) => void } } }).Telegram?.WebApp
     if (tg) {
-      tg.expand()
-      tg.ready()
-      tg.setBackgroundColor('#F8FAFC')
+      tg.expand?.()
+      tg.ready?.()
+      tg.setBackgroundColor?.('#F8FAFC')
     }
   }, [])
+
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: '#F8FAFC' }}>
+        <div style={{ width: 32, height: 32, border: '3px solid #3B82F6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    )
+  }
 
   const handleTabChange = (next: Tab) => {
     setPrevTab(tab)

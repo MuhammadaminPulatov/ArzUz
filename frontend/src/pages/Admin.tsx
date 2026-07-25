@@ -7,13 +7,19 @@ import {
 import {
   ArrowLeft, TrendingUp, TrendingDown, FileText, CheckCircle2,
   Clock, Users, ThumbsUp, RefreshCw, Search, ChevronDown,
-  Shield, Activity, AlertCircle,
+  Shield, Activity, AlertCircle, Map,
 } from 'lucide-react'
-import { getAnalytics, getAdminReports, updateReportStatus } from '@backend/services/analytics.service'
-import type { Analytics } from '@backend/types'
+import DistrictMap from '../components/DistrictMap'
+import { api } from '../lib/api'
 import type { Report } from '../types'
 
-type AdminTab = 'dashboard' | 'reports'
+interface AdminAnalytics {
+  total: number
+  byStatus: { sent?: number; in_progress?: number; resolved?: number }
+  avgResolutionDays: number
+}
+
+type AdminTab = 'dashboard' | 'reports' | 'map'
 
 const STATUS_MAP = {
   sent:        { label: 'Kutilmoqda', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', dot: '#F59E0B' },
@@ -57,7 +63,7 @@ interface AdminProps { onBack: () => void }
 
 export default function Admin({ onBack }: AdminProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard')
-  const [analytics, setAnalytics] = useState<Analytics | null>(null)
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null)
   const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -65,16 +71,19 @@ export default function Admin({ onBack }: AdminProps) {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([getAnalytics(), getAdminReports()]).then(([aRes, rRes]) => {
-      if (aRes.ok) setAnalytics(aRes.data)
-      if (rRes.ok) setReports(rRes.data)
+    Promise.all([
+      api.get<AdminAnalytics>('/admin/analytics').catch(() => null),
+      api.get<{ tickets: Report[] }>('/admin/tickets').catch(() => ({ tickets: [] })),
+    ]).then(([aData, rData]) => {
+      if (aData) setAnalytics(aData)
+      setReports(rData?.tickets ?? [])
       setLoading(false)
     })
   }, [])
 
   const handleStatusChange = async (id: string, status: Report['status']) => {
     setUpdatingId(id)
-    await updateReportStatus(id, status)
+    await api.patch(`/admin/tickets/${id}`, { status }).catch(() => null)
     setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
     setUpdatingId(null)
   }
@@ -88,9 +97,9 @@ export default function Admin({ onBack }: AdminProps) {
 
   const pieData = analytics
     ? [
-        { name: 'Hal etildi', value: analytics.resolvedCount },
-        { name: 'Jarayonda', value: analytics.inProgressCount },
-        { name: 'Kutilmoqda', value: analytics.pendingCount },
+        { name: 'Hal etildi', value: analytics.byStatus.resolved ?? 0 },
+        { name: 'Jarayonda', value: analytics.byStatus.in_progress ?? 0 },
+        { name: 'Kutilmoqda', value: analytics.byStatus.sent ?? 0 },
       ]
     : []
 
@@ -128,9 +137,12 @@ export default function Admin({ onBack }: AdminProps) {
           whileTap={{ scale: 0.88, rotate: 180 }}
           onClick={() => {
             setLoading(true)
-            Promise.all([getAnalytics(), getAdminReports()]).then(([a, r]) => {
-              if (a.ok) setAnalytics(a.data)
-              if (r.ok) setReports(r.data)
+            Promise.all([
+              api.get<AdminAnalytics>('/admin/analytics').catch(() => null),
+              api.get<{ tickets: Report[] }>('/admin/tickets').catch(() => ({ tickets: [] })),
+            ]).then(([aData, rData]) => {
+              if (aData) setAnalytics(aData)
+              setReports(rData?.tickets ?? [])
               setLoading(false)
             })
           }}
@@ -146,6 +158,7 @@ export default function Admin({ onBack }: AdminProps) {
         {([
           { id: 'dashboard', label: 'Dashboard', icon: <Activity size={14} /> },
           { id: 'reports',   label: 'Arizalar',  icon: <FileText size={14} /> },
+          { id: 'map',       label: 'Xarita',    icon: <Map size={14} /> },
         ] as const).map((t) => {
           const isActive = activeTab === t.id
           return (
@@ -194,7 +207,7 @@ export default function Admin({ onBack }: AdminProps) {
                     <KpiCard
                       icon={<FileText size={17} strokeWidth={2} />}
                       label="Jami arizalar"
-                      value={analytics.totalReports}
+                      value={analytics.total}
                       sub="Barcha vaqt"
                       trend={12}
                       color="#3B82F6"
@@ -203,8 +216,8 @@ export default function Admin({ onBack }: AdminProps) {
                     <KpiCard
                       icon={<CheckCircle2 size={17} strokeWidth={2} />}
                       label="Hal etilgan"
-                      value={`${analytics.resolvedPercent}%`}
-                      sub={`${analytics.resolvedCount} ta ariza`}
+                      value={`${analytics.total > 0 ? Math.round(((analytics.byStatus.resolved ?? 0) / analytics.total) * 100) : 0}%`}
+                      sub={`${analytics.byStatus.resolved ?? 0} ta ariza`}
                       trend={8}
                       color="#10B981"
                       bg="rgba(16,185,129,0.1)"
@@ -221,7 +234,7 @@ export default function Admin({ onBack }: AdminProps) {
                     <KpiCard
                       icon={<Users size={17} strokeWidth={2} />}
                       label="Faol foydalanuvchi"
-                      value={analytics.activeUsers}
+                      value={reports.length}
                       sub="Bu oy"
                       trend={23}
                       color="#8B5CF6"
@@ -237,7 +250,7 @@ export default function Admin({ onBack }: AdminProps) {
                     >
                       <ThumbsUp size={16} style={{ color: '#6366F1' }} strokeWidth={2} />
                       <div>
-                        <div className="text-[17px] font-black" style={{ color: '#0F172A' }}>{analytics.totalVotes.toLocaleString()}</div>
+                        <div className="text-[17px] font-black" style={{ color: '#0F172A' }}>{reports.reduce((s, r) => s + (r.votes ?? 0), 0).toLocaleString()}</div>
                         <div className="text-[10px]" style={{ color: '#94A3B8' }}>Jami ovozlar</div>
                       </div>
                     </div>
@@ -247,7 +260,7 @@ export default function Admin({ onBack }: AdminProps) {
                     >
                       <AlertCircle size={16} style={{ color: '#EF4444' }} strokeWidth={2} />
                       <div>
-                        <div className="text-[17px] font-black" style={{ color: '#0F172A' }}>{analytics.pendingCount}</div>
+                        <div className="text-[17px] font-black" style={{ color: '#0F172A' }}>{analytics.byStatus.sent ?? 0}</div>
                         <div className="text-[10px]" style={{ color: '#94A3B8' }}>Kutilmoqda</div>
                       </div>
                     </div>
@@ -275,7 +288,7 @@ export default function Admin({ onBack }: AdminProps) {
                       </div>
                     </div>
                     <ResponsiveContainer width="100%" height={160}>
-                      <LineChart data={analytics.dailyStats} margin={{ left: -20, right: 8, top: 4, bottom: 0 }}>
+                      <LineChart data={[]} margin={{ left: -20, right: 8, top: 4, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
                         <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
                         <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
@@ -299,7 +312,7 @@ export default function Admin({ onBack }: AdminProps) {
                       <p className="text-[11px]" style={{ color: '#94A3B8' }}>Jami va hal etilgan</p>
                     </div>
                     <ResponsiveContainer width="100%" height={180}>
-                      <BarChart data={analytics.categoryStats} margin={{ left: -20, right: 8, top: 4, bottom: 0 }} barSize={16}>
+                      <BarChart data={[]} margin={{ left: -20, right: 8, top: 4, bottom: 0 }} barSize={16}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
                         <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
@@ -308,8 +321,8 @@ export default function Admin({ onBack }: AdminProps) {
                           labelStyle={{ fontWeight: 700, color: '#0F172A' }}
                         />
                         <Bar dataKey="count" name="Jami" radius={[4, 4, 0, 0]}>
-                          {analytics.categoryStats.map((entry, i) => (
-                            <Cell key={i} fill={entry.color} fillOpacity={0.85} />
+                          {[].map((_entry, i) => (
+                            <Cell key={i} fill="#3B82F6" fillOpacity={0.85} />
                           ))}
                         </Bar>
                         <Bar dataKey="resolved" name="Hal etildi" fill="#10B981" fillOpacity={0.5} radius={[4, 4, 0, 0]} />
@@ -348,7 +361,7 @@ export default function Admin({ onBack }: AdminProps) {
                             <div className="flex items-center gap-2">
                               <span className="text-[12px] font-bold" style={{ color: '#0F172A' }}>{d.value}</span>
                               <span className="text-[10px]" style={{ color: '#94A3B8' }}>
-                                ({analytics ? Math.round((d.value / analytics.totalReports) * 100) : 0}%)
+                                ({analytics && analytics.total > 0 ? Math.round((d.value / analytics.total) * 100) : 0}%)
                               </span>
                             </div>
                           </div>
@@ -494,6 +507,23 @@ export default function Admin({ onBack }: AdminProps) {
                   <p className="text-[14px] font-bold" style={{ color: '#94A3B8' }}>Ariza topilmadi</p>
                 </div>
               )}
+            </motion.div>
+          )}
+
+          {/* ── MAP ── */}
+          {activeTab === 'map' && (
+            <motion.div
+              key="map"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col gap-3 mt-1"
+            >
+              <div>
+                <p className="text-[15px] font-black" style={{ color: '#0F172A' }}>Toshkent tumanlari xaritasi</p>
+                <p className="text-[11px] mt-0.5" style={{ color: '#94A3B8' }}>Muammolar soni va taqsimoti</p>
+              </div>
+              <DistrictMap />
             </motion.div>
           )}
 
