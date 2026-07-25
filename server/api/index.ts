@@ -1,4 +1,3 @@
-/// <reference path="../src/types/express.d.ts" />
 import 'dotenv/config'
 import mongoose from 'mongoose'
 import { env } from '../src/config/env'
