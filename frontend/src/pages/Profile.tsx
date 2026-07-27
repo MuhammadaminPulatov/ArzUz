@@ -102,7 +102,7 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
   }, [])
 
   useEffect(() => {
-    api.get<LeaderboardEntry[]>('/leaderboard').then(setLeaderboard).catch(() => {})
+    api.get<LeaderboardEntry[]>('/auth/leaderboard').then(setLeaderboard).catch(() => {})
   }, [])
 
   const nextLevelXp = Math.ceil((xp + 1) / 500) * 500
