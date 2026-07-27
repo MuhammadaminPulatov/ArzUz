@@ -3,6 +3,6 @@ frontend/node_modules/
 dist/
 *.local
 .DS_Store
-node_modules/
-node_modules/
 .vercel
+.env
+**/.env
