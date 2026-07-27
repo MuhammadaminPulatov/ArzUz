@@ -14,6 +14,15 @@ interface RawTicket {
 
 interface TicketsResponse { tickets: RawTicket[]; total: number }
 
+function fmtDate(iso: string): string {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    const MONTHS = ['yan','fev','mar','apr','may','iyn','iyl','avg','sen','okt','noy','dek']
+    return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+  } catch { return iso }
+}
+
 export function normalizeTicket(t: RawTicket): Report {
   const cat = CATEGORIES.find(c => c.id === t.category) ?? CATEGORIES[CATEGORIES.length - 1]
   return {
@@ -34,7 +43,7 @@ export function normalizeTicket(t: RawTicket): Report {
     status:         (t.status as Report['status']) ?? 'new',
     votes:          t.votes ?? 0,
     hasVoted:       false,
-    createdAt:      t.createdAt ?? '',
+    createdAt:      fmtDate(t.createdAt ?? ''),
     aiSummary:      t.aiDescription ?? '',
     severity:       (t.severity as Report['severity']) ?? 'medium',
     supporterAvatars: [],
