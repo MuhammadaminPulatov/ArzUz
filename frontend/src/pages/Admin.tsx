@@ -73,9 +73,9 @@ export default function Admin({ onBack }: AdminProps) {
   useEffect(() => {
     Promise.all([
       api.get<AdminAnalytics>('/admin/analytics').catch(() => null),
-      api.get<{ tickets: Report[] }>('/admin/tickets').catch(() => ({ tickets: [] })),
+      api.get<{ tickets: Report[]; total: number }>('/admin/tickets').catch(() => null),
     ]).then(([aData, rData]) => {
-      if (aData) setAnalytics(aData)
+      setAnalytics(aData ?? { total: 0, byStatus: {}, avgResolutionDays: 0 })
       setReports(rData?.tickets ?? [])
       setLoading(false)
     })
@@ -139,9 +139,9 @@ export default function Admin({ onBack }: AdminProps) {
             setLoading(true)
             Promise.all([
               api.get<AdminAnalytics>('/admin/analytics').catch(() => null),
-              api.get<{ tickets: Report[] }>('/admin/tickets').catch(() => ({ tickets: [] })),
+              api.get<{ tickets: Report[] }>('/admin/tickets').catch(() => null),
             ]).then(([aData, rData]) => {
-              if (aData) setAnalytics(aData)
+              setAnalytics(aData ?? { total: 0, byStatus: {}, avgResolutionDays: 0 })
               setReports(rData?.tickets ?? [])
               setLoading(false)
             })
