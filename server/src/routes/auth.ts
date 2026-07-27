@@ -106,5 +106,27 @@ authRouter.get('/me', authMiddleware, async (req: Request, res: Response) => {
     .sort({ createdAt: -1 })
     .limit(20)
 
-  res.json({ ok: true, data: { ...user, tickets } })
+  res.json({ ok: true, data: { ...user, isAdmin: (req as any).user!.isAdmin, tickets } })
+})
+
+// GET /api/leaderboard — public, no auth required
+authRouter.get('/leaderboard', async (req: Request, res: Response) => {
+  const limit = Math.min(50, parseInt(String(req.query['limit'] ?? '10'), 10))
+  const users = await User.find()
+    .sort({ xp: -1 })
+    .limit(limit)
+    .select('telegramId firstName username xp reportCount badges')
+    .lean()
+
+  const leaderboard = users.map((u, i) => ({
+    rank: i + 1,
+    telegramId: u.telegramId,
+    firstName: u.firstName,
+    username: u.username,
+    xp: u.xp,
+    reportCount: u.reportCount,
+    badges: u.badges,
+  }))
+
+  res.json({ ok: true, data: leaderboard })
 })
