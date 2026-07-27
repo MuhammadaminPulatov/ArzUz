@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { MapPin, Clock, ChevronUp, ChevronDown, Users, Sparkles } from 'lucide-react'
 import type { Report } from '../types'
 
-const STATUS_CONFIG = {
-  sent: { label: 'Yuborildi', text: '#92400E', bg: 'rgba(245,158,11,0.12)', dot: '#F59E0B' },
+const STATUS_CONFIG: Record<string, { label: string; text: string; bg: string; dot: string }> = {
+  new:         { label: 'Yangi',      text: '#92400E', bg: 'rgba(245,158,11,0.12)', dot: '#F59E0B' },
+  sent:        { label: 'Yuborildi', text: '#92400E', bg: 'rgba(245,158,11,0.12)', dot: '#F59E0B' },
   in_progress: { label: 'Jarayonda', text: '#1E40AF', bg: 'rgba(59,130,246,0.12)', dot: '#3B82F6' },
-  resolved: { label: 'Hal Etildi', text: '#065F46', bg: 'rgba(16,185,129,0.12)', dot: '#10B981' },
+  resolved:    { label: 'Hal Etildi', text: '#065F46', bg: 'rgba(16,185,129,0.12)', dot: '#10B981' },
 }
 
 const SEVERITY_GRADIENT = {
@@ -24,7 +25,7 @@ interface ReportCardProps {
 export default function ReportCard({ report, onVote, compact }: ReportCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [votePop, setVotePop] = useState(false)
-  const status = STATUS_CONFIG[report.status]
+  const status = STATUS_CONFIG[report.status] ?? STATUS_CONFIG['new']
 
   const handleVote = () => {
     setVotePop(true)

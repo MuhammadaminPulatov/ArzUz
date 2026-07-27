@@ -12,10 +12,11 @@ export interface Ticket {
   thumbnailColor: string
 }
 
-const STATUS_CONFIG = {
-  sent: { label: "Yuborildi", dot: "#F59E0B", bg: "rgba(245,158,11,0.12)", text: "#B45309" },
+const STATUS_CONFIG: Record<string, { label: string; dot: string; bg: string; text: string }> = {
+  new:         { label: "Yangi",      dot: "#F59E0B", bg: "rgba(245,158,11,0.12)", text: "#B45309" },
+  sent:        { label: "Yuborildi", dot: "#F59E0B", bg: "rgba(245,158,11,0.12)", text: "#B45309" },
   in_progress: { label: "Jarayonda", dot: "#3B82F6", bg: "rgba(59,130,246,0.12)", text: "#1D4ED8" },
-  resolved: { label: "Hal Etildi", dot: "#10B981", bg: "rgba(16,185,129,0.12)", text: "#065F46" },
+  resolved:    { label: "Hal Etildi", dot: "#10B981", bg: "rgba(16,185,129,0.12)", text: "#065F46" },
 }
 
 const SAMPLE_TICKETS: Ticket[] = [
@@ -137,7 +138,7 @@ export default function MyTickets({ isOpen, onClose }: MyTicketsProps) {
             {/* Ticket list */}
             <div className="overflow-y-auto flex-1 px-4 pb-6 flex flex-col gap-3">
               {SAMPLE_TICKETS.map((ticket, i) => {
-                const status = STATUS_CONFIG[ticket.status]
+                const status = STATUS_CONFIG[ticket.status] ?? STATUS_CONFIG['new']
                 return (
                   <motion.div
                     key={ticket.id}

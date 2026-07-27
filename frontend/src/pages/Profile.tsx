@@ -8,6 +8,7 @@ import {
 import { BADGES } from '../data/mock'
 import { api } from '../lib/api'
 import { getTelegramUserName, getTelegramUsername } from '../hooks/useAuth'
+import { normalizeTicket } from '../hooks/useReports'
 import type { Report } from '../types'
 
 /* ──────────────────────────────────────────────────────────────
@@ -31,7 +32,8 @@ function getTitle(xp: number): typeof TITLES[number] {
 /* ──────────────────────────────────────────────────────────────
    Constants
 ────────────────────────────────────────────────────────────── */
-const STATUS_CONFIG = {
+const STATUS_CONFIG: Record<string, { label: string; text: string; dot: string; bg: string }> = {
+  new:         { label: 'Yangi',      text: '#B45309', dot: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   sent:        { label: 'Yuborildi',  text: '#B45309', dot: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   in_progress: { label: 'Jarayonda', text: '#1D4ED8', dot: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
   resolved:    { label: 'Hal Etildi',text: '#065F46', dot: '#10B981', bg: 'rgba(16,185,129,0.1)' },
@@ -95,8 +97,8 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
         setReportCount(u.reportCount)
         setResolvedCount(u.resolvedCount)
         setEarnedBadgeIds(u.badges ?? [])
-        setMyReports(u.tickets ?? [])
-        setTotalVotes((u.tickets ?? []).reduce((sum, t) => sum + (t.votes ?? 0), 0))
+        setMyReports((u.tickets ?? []).map(normalizeTicket as any))
+        setTotalVotes((u.tickets ?? []).reduce((sum, t) => sum + ((t as any).votes ?? 0), 0))
       })
       .catch(() => {})
   }, [])
@@ -294,7 +296,7 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
           {activeTab === 'reports' && (
             <motion.div key="reports" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.22 }} className="flex flex-col gap-3">
               {myReports.map((r, i) => {
-                const st = STATUS_CONFIG[r.status]
+                const st = STATUS_CONFIG[r.status] ?? STATUS_CONFIG['new']
                 return (
                   <motion.div key={r.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07, duration: 0.28 }}
                     className="flex items-center gap-3 p-3.5 rounded-3xl"

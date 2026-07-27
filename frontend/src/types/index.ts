@@ -13,7 +13,7 @@ export interface Report {
   lng: number
   photoColor: string
   photoEmoji: string
-  status: 'sent' | 'in_progress' | 'resolved'
+  status: 'new' | 'sent' | 'in_progress' | 'resolved'
   votes: number
   hasVoted: boolean
   createdAt: string

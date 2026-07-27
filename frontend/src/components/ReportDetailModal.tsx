@@ -18,10 +18,11 @@ const SEVERITY = {
   high:   { label: 'Yuqori', color: '#EF4444', bg: 'rgba(239,68,68,0.1)',   stripe: '#EF4444' },
 }
 
-const STATUS_CONFIG = {
-  sent:        { color: '#F59E0B', text: "Mahalla inspektori ko'rib chiqmoqda" },
-  in_progress: { color: '#3B82F6', text: "Tegishli bo'lim ishni boshladi"       },
-  resolved:    { color: '#10B981', text: 'Muammo muvaffaqiyatli hal etildi'      },
+const STATUS_CONFIG: Record<string, { color: string; text: string }> = {
+  new:         { color: '#F59E0B', text: "Ariza qabul qilindi"                   },
+  sent:        { color: '#F59E0B', text: "Mahalla inspektori ko'rib chiqmoqda"  },
+  in_progress: { color: '#3B82F6', text: "Tegishli bo'lim ishni boshladi"        },
+  resolved:    { color: '#10B981', text: 'Muammo muvaffaqiyatli hal etildi'       },
 }
 
 interface Props {
@@ -43,7 +44,7 @@ export default function ReportDetailModal({ report, onClose, onVote }: Props) {
 
   const sev = report ? SEVERITY[report.severity] : SEVERITY.medium
   const currentStepIdx = report ? STATUS_STEPS.findIndex(s => s.key === report.status) : 0
-  const statusInfo = report ? STATUS_CONFIG[report.status] : STATUS_CONFIG.sent
+  const statusInfo = report ? (STATUS_CONFIG[report.status] ?? STATUS_CONFIG.sent) : STATUS_CONFIG.sent
 
   return (
     <AnimatePresence>
