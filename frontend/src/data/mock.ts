@@ -35,6 +35,46 @@ export const SAMPLE_REPORTS: Report[] = [
     createdAt: '5 soat oldin', aiSummary: "Ko'cha yoritish tizimida uzilish aniqlandi.", severity: 'medium',
     supporterAvatars: ['E', 'F', 'G'],
   },
+  {
+    id: 'ARZ-1006', userId: 'u4', username: 'Javohir K.', userAvatar: 'J',
+    category: "Suv muammosi", categoryIcon: '💧', categoryColor: '#3B82F6',
+    title: "Suv quvuri yorilgan, ko'chaga oqayapti",
+    description: "Navoiy ko'chasida suv quvuri yorilgan, 2 kundan beri suv oqib yotibdi. Yo'l yuzasi shikastlangan.",
+    address: "Toshkent sh., Navoiy ko'ch. 45", lat: 41.3115, lng: 69.2795,
+    photoColor: '#DBEAFE', photoEmoji: '💧', status: 'in_progress', votes: 56, hasVoted: false,
+    createdAt: '1 kun oldin', aiSummary: "Suv quvuridagi yoriq tufayli suv isrof bo'lmoqda.", severity: 'high',
+    supporterAvatars: ['H', 'I', 'J', 'K', 'L'],
+  },
+  {
+    id: 'ARZ-1005', userId: 'u5', username: 'Nodira A.', userAvatar: 'N',
+    category: "Axlat muammosi", categoryIcon: '🗑️', categoryColor: '#10B981',
+    title: "Axlat konteyneri to'lib ketgan",
+    description: "15-uy oldidagi axlat konteyneri 4 kundan beri bo'shatilmagan. Hiddan yashash qiyin.",
+    address: "Chilonzor, 15-kvartal, 15-uy", lat: 41.2857, lng: 69.2100,
+    photoColor: '#D1FAE5', photoEmoji: '🗑️', status: 'sent', votes: 34, hasVoted: false,
+    createdAt: '8 soat oldin', aiSummary: "Axlat yig'ish xizmati kechikmoqda.", severity: 'medium',
+    supporterAvatars: ['L', 'M', 'N'],
+  },
+  {
+    id: 'ARZ-1004', userId: 'u6', username: 'Bobur M.', userAvatar: 'B',
+    category: "Elektr muammosi", categoryIcon: '⚡', categoryColor: '#8B5CF6',
+    title: "Elektr simi uzilgan, xavfli holat",
+    description: "7-kvartal parki yonida elektr simi uzilgan holda osilib turibdi. Bolalar o'ynaydi, xavfli!",
+    address: "Sergeli tumani, 7-kvartal", lat: 41.2520, lng: 69.2300,
+    photoColor: '#EDE9FE', photoEmoji: '⚡', status: 'in_progress', votes: 72, hasVoted: false,
+    createdAt: '3 soat oldin', aiSummary: "Ochiq elektr simi havfsizlik xavfi tug'dirmoqda.", severity: 'high',
+    supporterAvatars: ['O', 'P', 'Q', 'R', 'S', 'T'],
+  },
+  {
+    id: 'ARZ-1003', userId: 'u7', username: 'Dilnoza S.', userAvatar: 'D',
+    category: "Ko'kalamzorlashtirish", categoryIcon: '🌳', categoryColor: '#22C55E',
+    title: "Park daraxtlari qurib qolgan",
+    description: "Bobur bog'idagi 10 dan ortiq daraxt qurib qolgan. Sug'orish tizimi ishlamayapti.",
+    address: "Mirzo Ulug'bek, Bobur bog'i", lat: 41.3200, lng: 69.2650,
+    photoColor: '#DCFCE7', photoEmoji: '🌳', status: 'resolved', votes: 41, hasVoted: true,
+    createdAt: '2 kun oldin', aiSummary: "Ko'kalamzorlashtirish tizimida nosozlik aniqlandi.", severity: 'low',
+    supporterAvatars: ['U', 'V', 'W'],
+  },
 ]
 
 export const BADGES: Badge[] = [
@@ -47,3 +87,22 @@ export const BADGES: Badge[] = [
   { id: 'popular',   icon: '⭐', name: 'Ommalashgan ariza',  description: 'Arizangizga 20+ ovoz berildi',      earned: false, xpReward: 120, progress: 14, total: 20 },
   { id: 'verified',  icon: '💎', name: 'Ishonchli fuqaro',   description: 'Barcha arizalar tasdiqlangan',      earned: true,  xpReward: 300 },
 ]
+
+/* ─── Mock profile data (fallback when server is unavailable) ─── */
+export const MOCK_PROFILE = {
+  firstName: 'Foydalanuvchi',
+  xp: 850,
+  isAdmin: true,
+  tickets: SAMPLE_REPORTS.slice(0, 3),
+}
+
+/* ─── Mock admin analytics (fallback when server is unavailable) ─── */
+export const MOCK_ANALYTICS = {
+  total: SAMPLE_REPORTS.length,
+  byStatus: {
+    sent: SAMPLE_REPORTS.filter(r => r.status === 'sent').length,
+    in_progress: SAMPLE_REPORTS.filter(r => r.status === 'in_progress').length,
+    resolved: SAMPLE_REPORTS.filter(r => r.status === 'resolved').length,
+  },
+  avgResolutionDays: 3.2,
+}

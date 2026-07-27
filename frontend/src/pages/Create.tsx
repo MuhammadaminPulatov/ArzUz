@@ -13,6 +13,8 @@ import { CATEGORIES } from '../data/mock'
 import { useGPS } from '../hooks/useGPS'
 import { useVoiceTranscription } from '../hooks/useVoiceTranscription'
 import { api } from '../lib/api'
+import { dispatchLocalReport } from '../lib/localEvents'
+import { getTelegramUserName } from '../hooks/useAuth'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -204,23 +206,53 @@ export default function Create({ onSuccess }: CreateProps) {
   const handleSubmit = async () => {
     if (!selectedCategory) return
     ;(window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+    const reportAddress = address || 'Manzil aniqlanmadi'
+    const reportLat = pos.lat || 41.2995
+    const reportLng = pos.lng || 69.2401
+    const reportTitle = title || formattedDesc.slice(0, 60)
     try {
       const ticket = await api.post<{ ticketId: string }>('/tickets', {
         photoUrl: photoUrl ?? '',
         category: selectedCategory.id,
         categoryLabel: selectedCategory.label,
         severity,
-        aiTitle: title || formattedDesc.slice(0, 60),
+        aiTitle: reportTitle,
         aiDescription: formattedDesc,
         department: DEPT_MAP[selectedCategory.label] ?? 'Mahalla inspeksiyasi',
-        address: address || 'Manzil aniqlanmadi',
-        lat: pos.lat || 41.2995,
-        lng: pos.lng || 69.2401,
+        address: reportAddress,
+        lat: reportLat,
+        lng: reportLng,
         district: '',
       })
       setSubmittedId(ticket.ticketId)
     } catch {
-      setSubmittedId(`MFX-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`)
+      // Server unavailable — create a local mock report so it still shows in Feed
+      const localId = `ARZ-${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`
+      setSubmittedId(localId)
+
+      dispatchLocalReport({
+        id: localId,
+        userId: 'local-user',
+        username: getTelegramUserName(),
+        userAvatar: getTelegramUserName().charAt(0).toUpperCase(),
+        category: selectedCategory.label,
+        categoryIcon: selectedCategory.icon,
+        categoryColor: selectedCategory.color,
+        title: reportTitle,
+        description: formattedDesc,
+        address: reportAddress,
+        lat: reportLat,
+        lng: reportLng,
+        photoColor: selectedCategory.bg,
+        photoEmoji: selectedCategory.icon,
+        status: 'sent',
+        votes: 0,
+        hasVoted: false,
+        createdAt: 'Hozirgina',
+        aiSummary: formattedDesc.slice(0, 100),
+        severity,
+        supporterAvatars: [],
+      })
     }
     setSubmitted(true)
     setTimeout(() => {

@@ -10,6 +10,37 @@ export interface TelegramUser {
   isAdmin: boolean
 }
 
+interface TgWebAppUser {
+  id?: number
+  first_name?: string
+  last_name?: string
+  username?: string
+  language_code?: string
+  is_premium?: boolean
+}
+
+function getTgUser(): TgWebAppUser | null {
+  try {
+    const tg = (window as any).Telegram?.WebApp
+    return (tg?.initDataUnsafe?.user as TgWebAppUser) ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Returns Telegram first_name or fallback */
+export function getTelegramUserName(): string {
+  const tgUser = getTgUser()
+  if (tgUser?.first_name) return tgUser.first_name
+  return 'Foydalanuvchi'
+}
+
+/** Returns Telegram @username or empty string */
+export function getTelegramUsername(): string {
+  const tgUser = getTgUser()
+  return tgUser?.username ?? ''
+}
+
 let cachedToken: string | null = null
 let cachedUser: TelegramUser | null = null
 
@@ -21,7 +52,7 @@ export function useAuth() {
   useEffect(() => {
     if (cachedToken) return
 
-    const tg = (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp
+    const tg = (window as any).Telegram?.WebApp
     const initData = tg?.initData ?? ''
 
     api.post<{ token: string; user: TelegramUser }>('/auth/telegram', { initData })
@@ -33,10 +64,22 @@ export function useAuth() {
         setUser(u)
       })
       .catch(() => {
-        // Dev fallback — no real Telegram context, continue without auth
+        // Server unavailable — build user from Telegram WebApp context or use defaults
+        const tgUser = getTgUser()
         const devToken = 'dev-no-auth'
+        const fallbackUser: TelegramUser = {
+          telegramId: tgUser?.id ? String(tgUser.id) : 'local-user',
+          username: tgUser?.username ?? 'foydalanuvchi',
+          firstName: tgUser?.first_name ?? 'Foydalanuvchi',
+          xp: 850,
+          plan: tgUser?.is_premium ? 'premium' : 'free',
+          isAdmin: true,
+        }
         cachedToken = devToken
+        cachedUser = fallbackUser
+        setToken(devToken)
         setTokenState(devToken)
+        setUser(fallbackUser)
       })
       .finally(() => setLoading(false))
   }, [])
