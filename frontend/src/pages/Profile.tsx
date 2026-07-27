@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { BADGES } from '../data/mock'
 import { api } from '../lib/api'
+import { getTelegramUserName, getTelegramUsername } from '../hooks/useAuth'
 import type { Report } from '../types'
 
 /* ──────────────────────────────────────────────────────────────
@@ -36,17 +37,6 @@ const STATUS_CONFIG = {
   resolved:    { label: 'Hal Etildi',text: '#065F46', dot: '#10B981', bg: 'rgba(16,185,129,0.1)' },
 }
 
-const LEADERBOARD = [
-  { rank: 1, name: 'Sardor T.',    xp: 2840, title: "MahallaFaoli",        reports: 18, avatar: 'S', color: '#F59E0B', glow: 'rgba(245,158,11,0.25)', badge: '👑' },
-  { rank: 2, name: 'Malika R.',    xp: 2210, title: "MahallaFaoli",        reports: 14, avatar: 'M', color: '#94A3B8', glow: 'rgba(148,163,184,0.2)', badge: '🥈' },
-  { rank: 3, name: 'Jahongir K.',  xp: 1950, title: "EcoFaol",             reports: 12, avatar: 'J', color: '#CD7C3F', glow: 'rgba(205,124,63,0.2)',  badge: '🥉' },
-  { rank: 4, name: 'Aziz S.',      xp: 1580, title: "MahallaFaoli",        reports: 9,  avatar: 'A', color: '#3B82F6', glow: 'rgba(59,130,246,0.3)',  badge: '⭐', isMe: true },
-  { rank: 5, name: 'Nodira A.',    xp: 1220, title: "Faol fuqaro",          reports: 7,  avatar: 'N', color: '#8B5CF6', glow: 'rgba(139,92,246,0.15)', badge: '⭐' },
-]
-
-// Premium "Taniqli" users (admin-assignable)
-const TANIQLI_USERS = ['Sardor T.', 'UzMedia_Blog']
-
 // Reward catalog
 const REWARDS = [
   { id: 'r1', icon: Gift,   label: 'UzCard bonusi',      xp: 500,  desc: '50,000 so\'m',   color: '#10B981' },
@@ -64,29 +54,60 @@ const TABS = [
 
 type Tab = typeof TABS[number]['id']
 
+interface LeaderboardEntry {
+  rank: number
+  telegramId: string
+  firstName: string
+  username: string
+  xp: number
+  reportCount: number
+  badges: string[]
+}
+
 interface ProfileProps { onOpenAdmin: () => void }
 
 export default function Profile({ onOpenAdmin }: ProfileProps) {
   const [activeTab, setActiveTab] = useState<Tab>('reports')
   const [myReports, setMyReports] = useState<Report[]>([])
-  const [firstName, setFirstName] = useState('Foydalanuvchi')
+  const [firstName, setFirstName] = useState(getTelegramUserName())
   const [xp, setXp] = useState(0)
+  const [level, setLevel] = useState(1)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [reportCount, setReportCount] = useState(0)
+  const [resolvedCount, setResolvedCount] = useState(0)
+  const [totalVotes, setTotalVotes] = useState(0)
+  const [earnedBadgeIds, setEarnedBadgeIds] = useState<string[]>([])
+  const [myTelegramId, setMyTelegramId] = useState('')
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
 
   useEffect(() => {
-    api.get<{ firstName: string; xp: number; isAdmin: boolean; tickets: Report[] }>('/auth/me')
+    api.get<{
+      telegramId: string; firstName: string; xp: number; level: number;
+      isAdmin: boolean; reportCount: number; resolvedCount: number;
+      badges: string[]; tickets: Report[]
+    }>('/auth/me')
       .then((u) => {
-        setFirstName(u.firstName ?? 'Foydalanuvchi')
-        setXp(u.xp ?? 0)
+        setMyTelegramId(u.telegramId)
+        setFirstName(u.firstName)
+        setXp(u.xp)
+        setLevel(u.level)
         setIsAdmin(u.isAdmin ?? false)
+        setReportCount(u.reportCount)
+        setResolvedCount(u.resolvedCount)
+        setEarnedBadgeIds(u.badges ?? [])
         setMyReports(u.tickets ?? [])
+        setTotalVotes((u.tickets ?? []).reduce((sum, t) => sum + (t.votes ?? 0), 0))
       })
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    api.get<LeaderboardEntry[]>('/leaderboard').then(setLeaderboard).catch(() => {})
+  }, [])
+
   const nextLevelXp = Math.ceil((xp + 1) / 500) * 500
   const progress = (xp / nextLevelXp) * 100
-  const earnedBadges = BADGES.filter((b) => b.earned).length
+  const earnedBadges = earnedBadgeIds.length
   const currentTitle = getTitle(xp)
   const nextTitle = TITLES.find(t => t.minXp > xp)
 
@@ -154,7 +175,9 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
               </div>
             </motion.div>
 
-            <p className="text-[11px] text-blue-200 mt-1">@aziz_toshkent</p>
+            <p className="text-[11px] text-blue-200 mt-1">
+              {getTelegramUsername() ? `@${getTelegramUsername()}` : '—'}
+            </p>
 
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
               <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
@@ -177,7 +200,7 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
               className="w-12 h-12 rounded-2xl flex items-center justify-center"
               style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)' }}
             >
-              <span className="text-[22px] font-black text-white">4</span>
+              <span className="text-[22px] font-black text-white">{level}</span>
             </motion.div>
             <p className="text-[9px] text-blue-200 mt-0.5">{currentTitle.label.split(' ')[0]}</p>
           </div>
@@ -217,10 +240,10 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
       {/* ── Stat cards ── */}
       <div className="flex gap-2 px-4 py-3 shrink-0">
         {[
-          { Icon: FileText,     value: 5,   label: 'Ariza',      gradient: 'linear-gradient(135deg,#3B82F6,#6366F1)', shadow: 'rgba(99,102,241,0.2)' },
-          { Icon: CheckCircle2, value: 2,   label: 'Hal etildi', gradient: 'linear-gradient(135deg,#10B981,#059669)', shadow: 'rgba(16,185,129,0.2)' },
-          { Icon: Heart,        value: 119, label: 'Ovoz',       gradient: 'linear-gradient(135deg,#8B5CF6,#6366F1)', shadow: 'rgba(139,92,246,0.2)' },
-          { Icon: Flame,        value: 3,   label: 'Streak',     gradient: 'linear-gradient(135deg,#F59E0B,#EF4444)', shadow: 'rgba(245,158,11,0.2)' },
+          { Icon: FileText,     value: reportCount,  label: 'Ariza',      gradient: 'linear-gradient(135deg,#3B82F6,#6366F1)', shadow: 'rgba(99,102,241,0.2)' },
+          { Icon: CheckCircle2, value: resolvedCount, label: 'Hal etildi', gradient: 'linear-gradient(135deg,#10B981,#059669)', shadow: 'rgba(16,185,129,0.2)' },
+          { Icon: Heart,        value: totalVotes,    label: 'Ovoz',       gradient: 'linear-gradient(135deg,#8B5CF6,#6366F1)', shadow: 'rgba(139,92,246,0.2)' },
+          { Icon: Flame,        value: 0,             label: 'Streak',     gradient: 'linear-gradient(135deg,#F59E0B,#EF4444)', shadow: 'rgba(245,158,11,0.2)' },
         ].map((s, i) => (
           <motion.div
             key={s.label}
@@ -340,7 +363,9 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
 
               {/* Badges grid */}
               <div className="grid grid-cols-2 gap-3">
-                {BADGES.map((badge, i) => (
+                {BADGES.map((badge, i) => {
+                const earned = earnedBadgeIds.includes(badge.id)
+                return (
                   <motion.div
                     key={badge.id}
                     initial={{ opacity: 0, scale: 0.85 }}
@@ -348,13 +373,13 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
                     transition={{ delay: i * 0.06, type: 'spring', stiffness: 300, damping: 22 }}
                     className="rounded-3xl p-4 relative overflow-hidden"
                     style={{
-                      background: badge.earned ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)',
-                      boxShadow: badge.earned ? '0 4px 20px rgba(59,130,246,0.12)' : '0 1px 4px rgba(15,23,42,0.04)',
-                      border: badge.earned ? '1.5px solid rgba(99,102,241,0.2)' : '1.5px solid rgba(148,163,184,0.12)',
-                      opacity: badge.earned ? 1 : 0.62,
+                      background: earned ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)',
+                      boxShadow: earned ? '0 4px 20px rgba(59,130,246,0.12)' : '0 1px 4px rgba(15,23,42,0.04)',
+                      border: earned ? '1.5px solid rgba(99,102,241,0.2)' : '1.5px solid rgba(148,163,184,0.12)',
+                      opacity: earned ? 1 : 0.62,
                     }}
                   >
-                    {badge.earned ? (
+                    {earned ? (
                       <div className="absolute top-2.5 right-2.5 w-[18px] h-[18px] rounded-full bg-emerald-500 flex items-center justify-center">
                         <CheckCircle2 size={10} className="text-white" strokeWidth={2.5} />
                       </div>
@@ -366,7 +391,7 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
 
                     <motion.div
                       className="text-4xl mb-2.5"
-                      animate={badge.earned ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+                      animate={earned ? { scale: [1, 1.06, 1] } : { scale: 1 }}
                       transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
                     >
                       {badge.icon}
@@ -397,7 +422,8 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
                       </div>
                     )}
                   </motion.div>
-                ))}
+                )
+              })}
 
                 {/* Taniqli premium badge (admin-assigned) */}
                 <motion.div
@@ -555,58 +581,63 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
                 Bu oy eng faol fuqarolar
               </p>
 
-              {LEADERBOARD.map((item, i) => {
-                const isTaniqli = TANIQLI_USERS.includes(item.name)
+              {leaderboard.length === 0 ? (
+                <div className="text-center py-16">
+                  <Trophy size={40} className="mx-auto mb-3" style={{ color: '#CBD5E1' }} />
+                  <p className="text-[13px] font-bold" style={{ color: '#94A3B8' }}>Yuklanmoqda...</p>
+                </div>
+              ) : leaderboard.map((entry, i) => {
+                const RANK_STYLES = [
+                  { color: '#F59E0B', glow: 'rgba(245,158,11,0.25)',  BadgeIcon: Crown  },
+                  { color: '#94A3B8', glow: 'rgba(148,163,184,0.2)',  BadgeIcon: Trophy },
+                  { color: '#CD7C3F', glow: 'rgba(205,124,63,0.2)',   BadgeIcon: Trophy },
+                ]
+                const style = RANK_STYLES[i] ?? { color: '#3B82F6', glow: 'rgba(59,130,246,0.2)', BadgeIcon: Star }
+                const { BadgeIcon } = style
+                const isMe = entry.telegramId === myTelegramId
                 return (
                   <motion.div
-                    key={item.rank}
+                    key={entry.rank}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.07, duration: 0.28 }}
                     className="flex items-center gap-3 px-3.5 py-3 rounded-3xl relative overflow-hidden"
                     style={{
-                      background: item.isMe ? 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(99,102,241,0.07))' : 'rgba(255,255,255,0.9)',
-                      boxShadow: item.isMe ? `0 4px 20px rgba(59,130,246,0.15)` : '0 2px 10px rgba(15,23,42,0.06)',
-                      border: item.isMe ? '1.5px solid rgba(59,130,246,0.25)' : '1.5px solid rgba(255,255,255,0.7)',
+                      background: isMe ? 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(99,102,241,0.07))' : 'rgba(255,255,255,0.9)',
+                      boxShadow: isMe ? '0 4px 20px rgba(59,130,246,0.15)' : '0 2px 10px rgba(15,23,42,0.06)',
+                      border: isMe ? '1.5px solid rgba(59,130,246,0.25)' : '1.5px solid rgba(255,255,255,0.7)',
                     }}
                   >
-                    <span className="text-xl w-7 text-center shrink-0">{item.badge}</span>
-
+                    <div className="w-7 flex items-center justify-center shrink-0">
+                      <BadgeIcon size={16} style={{ color: style.color }} strokeWidth={2.5} />
+                    </div>
                     <motion.div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-[14px] font-black text-white shrink-0 relative"
-                      style={{ background: item.color, boxShadow: `0 4px 12px ${item.glow}` }}
-                      animate={item.rank === 1 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-[14px] font-black text-white shrink-0"
+                      style={{ background: style.color, boxShadow: `0 4px 12px ${style.glow}` }}
+                      animate={entry.rank === 1 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
                       transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                     >
-                      {item.avatar}
+                      {entry.firstName.charAt(0).toUpperCase()}
                     </motion.div>
-
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-[13px] font-bold" style={{ color: '#0F172A' }}>{item.name}</p>
-                        {item.isMe && (
+                        <p className="text-[13px] font-bold" style={{ color: '#0F172A' }}>{entry.firstName}</p>
+                        {isMe && (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
                             style={{ background: 'rgba(59,130,246,0.12)', color: '#3B82F6' }}>Siz</span>
-                        )}
-                        {isTaniqli && (
-                          <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md"
-                            style={{ background: 'rgba(245,158,11,0.12)', color: '#92400E' }}>
-                            <BadgeCheck size={9} strokeWidth={2.5} /> Taniqli
-                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <Users size={9} style={{ color: '#94A3B8' }} strokeWidth={2} />
-                        <p className="text-[10px]" style={{ color: '#94A3B8' }}>{item.reports} ta ariza</p>
+                        <p className="text-[10px]" style={{ color: '#94A3B8' }}>{entry.reportCount} ta ariza</p>
                         <span style={{ color: '#CBD5E1' }}>·</span>
-                        <span className="text-[10px] font-medium" style={{ color: getTitle(item.xp).color }}>{item.title}</span>
+                        <span className="text-[10px] font-medium" style={{ color: getTitle(entry.xp).color }}>{getTitle(entry.xp).label}</span>
                       </div>
                     </div>
-
                     <div className="text-right">
                       <div className="flex items-center gap-1 justify-end">
                         <Zap size={12} style={{ color: '#F59E0B' }} strokeWidth={2.5} />
-                        <span className="text-[14px] font-black" style={{ color: '#0F172A' }}>{item.xp}</span>
+                        <span className="text-[14px] font-black" style={{ color: '#0F172A' }}>{entry.xp}</span>
                       </div>
                       <p className="text-[9px]" style={{ color: '#94A3B8' }}>XP</p>
                     </div>
@@ -615,21 +646,29 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
               })}
 
               {/* Challenge card */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.45 }}
-                className="mt-1 rounded-3xl p-4 relative overflow-hidden"
-                style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.1), rgba(239,68,68,0.06))', border: '1.5px solid rgba(245,158,11,0.25)', boxShadow: '0 4px 16px rgba(245,158,11,0.1)' }}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Star size={15} style={{ color: '#F59E0B' }} strokeWidth={2.5} />
-                  <p className="text-[12.5px] font-bold" style={{ color: '#92400E' }}>Oy oxirigacha 1-o'ringa chiqing!</p>
-                </div>
-                <p className="text-[11.5px] leading-relaxed" style={{ color: '#78350F' }}>
-                  Sardordan 1260 XP orqada. Har bir ariza siz uchun qadam — muammolarni bildirib boring!
-                </p>
-              </motion.div>
+              {leaderboard.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.45 }}
+                  className="mt-1 rounded-3xl p-4 relative overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.1), rgba(239,68,68,0.06))', border: '1.5px solid rgba(245,158,11,0.25)', boxShadow: '0 4px 16px rgba(245,158,11,0.1)' }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Star size={15} style={{ color: '#F59E0B' }} strokeWidth={2.5} />
+                    <p className="text-[12.5px] font-bold" style={{ color: '#92400E' }}>
+                      {leaderboard[0]?.telegramId === myTelegramId
+                        ? '1-o\'rindasiz! Davom eting!'
+                        : 'Oy oxirigacha 1-o\'ringa chiqing!'}
+                    </p>
+                  </div>
+                  <p className="text-[11.5px] leading-relaxed" style={{ color: '#78350F' }}>
+                    {leaderboard[0]?.telegramId === myTelegramId
+                      ? 'Eng faol fuqaro sifatida jamoatingizga rahmat!'
+                      : `${leaderboard[0]?.firstName ?? 'Birinchidan'} ${(leaderboard[0]?.xp ?? 0) - xp} XP orqada. Muammolarni bildirib boring!`}
+                  </p>
+                </motion.div>
+              )}
             </motion.div>
           )}
 
