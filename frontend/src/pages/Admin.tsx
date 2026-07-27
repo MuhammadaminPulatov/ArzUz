@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -10,24 +10,27 @@ import {
   Shield, Activity, AlertCircle, Map,
 } from 'lucide-react'
 import DistrictMap from '../components/DistrictMap'
+import { CATEGORIES } from '../data/mock'
 import { api } from '../lib/api'
+import { normalizeTicket } from '../hooks/useReports'
 import type { Report } from '../types'
 
 interface AdminAnalytics {
   total: number
-  byStatus: { sent?: number; in_progress?: number; resolved?: number }
+  byStatus: { new?: number; sent?: number; in_progress?: number; resolved?: number }
   avgResolutionDays: number
 }
 
 type AdminTab = 'dashboard' | 'reports' | 'map'
 
-const STATUS_MAP = {
+const STATUS_MAP: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+  new:         { label: 'Yangi',      color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', dot: '#F59E0B' },
   sent:        { label: 'Kutilmoqda', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', dot: '#F59E0B' },
   in_progress: { label: 'Jarayonda',  color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', dot: '#3B82F6' },
   resolved:    { label: 'Hal etildi', color: '#10B981', bg: 'rgba(16,185,129,0.1)', dot: '#10B981' },
 }
 
-const STATUS_COLORS = ['#10B981', '#3B82F6', '#F59E0B']
+const STATUS_COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#F59E0B']
 
 interface KpiProps { icon: React.ReactNode; label: string; value: string | number; sub: string; trend?: number; color: string; bg: string }
 function KpiCard({ icon, label, value, sub, trend, color, bg }: KpiProps) {
@@ -70,16 +73,19 @@ export default function Admin({ onBack }: AdminProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadData = () => {
+    setLoading(true)
     Promise.all([
       api.get<AdminAnalytics>('/admin/analytics').catch(() => null),
-      api.get<{ tickets: Report[]; total: number }>('/admin/tickets').catch(() => null),
+      api.get<{ tickets: any[]; total: number }>('/admin/tickets').catch(() => null),
     ]).then(([aData, rData]) => {
       setAnalytics(aData ?? { total: 0, byStatus: {}, avgResolutionDays: 0 })
-      setReports(rData?.tickets ?? [])
+      setReports((rData?.tickets ?? []).map(normalizeTicket))
       setLoading(false)
     })
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const handleStatusChange = async (id: string, status: Report['status']) => {
     setUpdatingId(id)
@@ -98,10 +104,37 @@ export default function Admin({ onBack }: AdminProps) {
   const pieData = analytics
     ? [
         { name: 'Hal etildi', value: analytics.byStatus.resolved ?? 0 },
-        { name: 'Jarayonda', value: analytics.byStatus.in_progress ?? 0 },
-        { name: 'Kutilmoqda', value: analytics.byStatus.sent ?? 0 },
+        { name: 'Jarayonda',  value: analytics.byStatus.in_progress ?? 0 },
+        { name: 'Kutilmoqda', value: (analytics.byStatus.sent ?? 0) + (analytics.byStatus.new ?? 0) },
       ]
     : []
+
+  const categoryChartData = useMemo(() => {
+    const counts: Record<string, number> = {}
+    reports.forEach(r => {
+      const catId = CATEGORIES.find(c => c.label === r.category)?.id ?? 'other'
+      const label = CATEGORIES.find(c => c.id === catId)?.icon + ' ' + r.category.split(' ')[0]
+      counts[label] = (counts[label] ?? 0) + 1
+    })
+    return Object.entries(counts).map(([label, count]) => ({ label, count, resolved: 0 }))
+  }, [reports])
+
+  const weeklyChartData = useMemo(() => {
+    const days: Record<string, number> = {}
+    const now = Date.now()
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now - i * 86400000)
+      const key = `${d.getMonth()+1}/${d.getDate()}`
+      days[key] = 0
+    }
+    reports.forEach(r => {
+      if (!r.createdAt) return
+      const d = new Date(r.createdAt)
+      const key = `${d.getMonth()+1}/${d.getDate()}`
+      if (key in days) days[key]++
+    })
+    return Object.entries(days).map(([date, count]) => ({ date, reports: count, resolved: 0 }))
+  }, [reports])
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: '#F8FAFC' }}>
@@ -135,17 +168,7 @@ export default function Admin({ onBack }: AdminProps) {
 
         <motion.button
           whileTap={{ scale: 0.88, rotate: 180 }}
-          onClick={() => {
-            setLoading(true)
-            Promise.all([
-              api.get<AdminAnalytics>('/admin/analytics').catch(() => null),
-              api.get<{ tickets: Report[] }>('/admin/tickets').catch(() => null),
-            ]).then(([aData, rData]) => {
-              setAnalytics(aData ?? { total: 0, byStatus: {}, avgResolutionDays: 0 })
-              setReports(rData?.tickets ?? [])
-              setLoading(false)
-            })
-          }}
+          onClick={loadData}
           className="w-9 h-9 rounded-xl flex items-center justify-center"
           style={{ background: 'rgba(255,255,255,0.1)' }}
         >
@@ -260,7 +283,7 @@ export default function Admin({ onBack }: AdminProps) {
                     >
                       <AlertCircle size={16} style={{ color: '#EF4444' }} strokeWidth={2} />
                       <div>
-                        <div className="text-[17px] font-black" style={{ color: '#0F172A' }}>{analytics.byStatus.sent ?? 0}</div>
+                        <div className="text-[17px] font-black" style={{ color: '#0F172A' }}>{(analytics.byStatus.new ?? 0) + (analytics.byStatus.sent ?? 0)}</div>
                         <div className="text-[10px]" style={{ color: '#94A3B8' }}>Kutilmoqda</div>
                       </div>
                     </div>
@@ -288,7 +311,7 @@ export default function Admin({ onBack }: AdminProps) {
                       </div>
                     </div>
                     <ResponsiveContainer width="100%" height={160}>
-                      <LineChart data={[]} margin={{ left: -20, right: 8, top: 4, bottom: 0 }}>
+                      <LineChart data={weeklyChartData} margin={{ left: -20, right: 8, top: 4, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
                         <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
                         <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
@@ -312,7 +335,7 @@ export default function Admin({ onBack }: AdminProps) {
                       <p className="text-[11px]" style={{ color: '#94A3B8' }}>Jami va hal etilgan</p>
                     </div>
                     <ResponsiveContainer width="100%" height={180}>
-                      <BarChart data={[]} margin={{ left: -20, right: 8, top: 4, bottom: 0 }} barSize={16}>
+                      <BarChart data={categoryChartData} margin={{ left: -20, right: 8, top: 4, bottom: 0 }} barSize={16}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
                         <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} />
@@ -414,6 +437,7 @@ export default function Admin({ onBack }: AdminProps) {
                     }}
                   >
                     <option value="all">Barchasi</option>
+                    <option value="new">Yangi</option>
                     <option value="sent">Kutilmoqda</option>
                     <option value="in_progress">Jarayonda</option>
                     <option value="resolved">Hal etildi</option>
