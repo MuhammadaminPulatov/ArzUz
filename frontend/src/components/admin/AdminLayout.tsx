@@ -159,7 +159,7 @@ export default function AdminLayout({
         </div>
 
         {/* Content scroll area */}
-        <div className="flex-1 overflow-y-auto">
+        <div key={activeSection} className="flex-1 overflow-y-auto">
           {children}
         </div>
       </div>
