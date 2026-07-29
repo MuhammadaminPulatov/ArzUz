@@ -3,6 +3,8 @@ import { motion } from 'framer-motion'
 import { Search, ChevronDown, FileText, ThumbsUp, Building2 } from 'lucide-react'
 import { CATEGORIES } from '../../data/mock'
 import type { Report } from '../../types'
+import AssignOrgModal from './AssignOrgModal'
+import { type MockOrganization } from '@backend/mock/organizations'
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   new:         { label: 'Yangi',      color: '#F59E0B', bg: 'rgba(245,158,11,0.1)',  dot: '#F59E0B' },
@@ -24,6 +26,8 @@ export default function AdminReports({ reports, onStatusChange, updatingId }: Pr
   const [statusFilter, setStatusFilter]     = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [page, setPage]                     = useState(1)
+  const [assignedOrgs,    setAssignedOrgs]   = useState<Record<string, MockOrganization>>({})
+  const [assigningReport, setAssigningReport] = useState<{ id: string; category: string } | null>(null)
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -37,6 +41,13 @@ export default function AdminReports({ reports, onStatusChange, updatingId }: Pr
 
   const paginated = filtered.slice(0, page * ITEMS_PER_PAGE)
   const hasMore   = paginated.length < filtered.length
+
+  const handleAssign = (org: MockOrganization) => {
+    if (!assigningReport) return
+    setAssignedOrgs(prev => ({ ...prev, [assigningReport.id]: org }))
+    onStatusChange(assigningReport.id, 'in_progress')
+    setAssigningReport(null)
+  }
 
   return (
     <div className="px-4 pb-8 pt-1 flex flex-col gap-3">
@@ -131,13 +142,22 @@ export default function AdminReports({ reports, onStatusChange, updatingId }: Pr
                 })}
               </div>
 
-              <button disabled
-                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-[11px] font-semibold"
-                style={{ background: 'rgba(241,245,249,0.5)', color: '#CBD5E1', border: '1px dashed #E2E8F0', cursor: 'not-allowed' }}
-                title="Sub-loyiha 2 da faollashadi">
-                <Building2 size={12} />
-                Tashkilotga yo'naltirish
-              </button>
+              {assignedOrgs[r.id] ? (
+                <div className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-[11px] font-semibold"
+                  style={{ background: 'rgba(59,130,246,0.08)', color: '#3B82F6', border: '1px solid rgba(59,130,246,0.2)' }}>
+                  <span className="text-base leading-none">{assignedOrgs[r.id]!.icon}</span>
+                  <span>{assignedOrgs[r.id]!.shortName}</span>
+                  <span style={{ color: '#94A3B8' }}>ga yo'naltirildi</span>
+                </div>
+              ) : (
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={() => setAssigningReport({ id: r.id, category: r.category })}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-[11px] font-semibold"
+                  style={{ background: 'rgba(241,245,249,0.8)', color: '#64748B', border: '1px dashed #CBD5E1' }}>
+                  <Building2 size={12} />
+                  Tashkilotga yo'naltirish
+                </motion.button>
+              )}
             </motion.div>
           )
         })}
@@ -157,6 +177,13 @@ export default function AdminReports({ reports, onStatusChange, updatingId }: Pr
           Ko'proq yuklash ({filtered.length - paginated.length} ta qoldi)
         </button>
       )}
+
+      <AssignOrgModal
+        reportCategory={assigningReport?.category ?? ''}
+        open={assigningReport !== null}
+        onClose={() => setAssigningReport(null)}
+        onAssign={handleAssign}
+      />
     </div>
   )
 }
