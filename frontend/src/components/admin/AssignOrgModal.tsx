@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Search } from 'lucide-react'
 import { MOCK_ORGANIZATIONS, type MockOrganization } from '@backend/mock/organizations'
@@ -23,7 +24,7 @@ export default function AssignOrgModal({ reportCategory, open, onClose, onAssign
     ...filtered.filter(org => org.category !== reportCategory),
   ]
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -39,6 +40,9 @@ export default function AssignOrgModal({ reportCategory, open, onClose, onAssign
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
             className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl flex flex-col"
             style={{ background: '#fff', maxHeight: '80vh' }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Tashkilot tanlash"
           >
             {/* Handle */}
             <div className="flex justify-center pt-3 pb-1 shrink-0">
@@ -64,7 +68,6 @@ export default function AssignOrgModal({ reportCategory, open, onClose, onAssign
               <div className="relative">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#94A3B8' }} />
                 <input
-                  autoFocus
                   type="text" value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Tashkilot qidirish..."
@@ -79,16 +82,15 @@ export default function AssignOrgModal({ reportCategory, open, onClose, onAssign
               {sorted.length === 0 && (
                 <p className="text-center py-10 text-[13px]" style={{ color: '#94A3B8' }}>Tashkilot topilmadi</p>
               )}
-              {sorted.map((org, i) => {
+              {sorted.map((org) => {
                 const isMatch = org.category === reportCategory
                 return (
                   <motion.button
                     key={org.id}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => { onAssign(org); onClose() }}
+                    onClick={() => { onAssign(org) }}
                     className="w-full flex items-center gap-3 py-3 text-left"
                     style={{ borderBottom: '1px solid rgba(226,232,240,0.5)' }}
                   >
@@ -114,6 +116,7 @@ export default function AssignOrgModal({ reportCategory, open, onClose, onAssign
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }
