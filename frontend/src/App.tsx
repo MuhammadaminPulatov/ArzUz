@@ -25,6 +25,7 @@ export default function App() {
       tg.ready?.()
       tg.setBackgroundColor?.('#F8FAFC')
     }
+    if (window.location.search.includes('admin=1')) setShowAdmin(true)
   }, [])
 
   if (authLoading) {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Search } from 'lucide-react'
@@ -13,6 +13,10 @@ interface Props {
 
 export default function AssignOrgModal({ reportCategory, open, onClose, onAssign }: Props) {
   const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    if (!open) setSearch('')
+  }, [open])
 
   const filtered = MOCK_ORGANIZATIONS.filter(org => {
     const q = search.toLowerCase()
