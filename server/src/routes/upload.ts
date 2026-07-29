@@ -23,10 +23,13 @@ uploadRouter.post('/', authMiddleware, upload.single('photo'), async (req: Reque
   }
 
   // Blob upload and AI analysis run in parallel
-  const [blobResult, ai] = await Promise.all([
-    uploadPhoto(req.file.buffer, req.file.originalname, req.file.mimetype),
+  const [blobSettled, ai] = await Promise.all([
+    uploadPhoto(req.file.buffer, req.file.originalname, req.file.mimetype).catch(() => null),
     analyzePhoto(req.file.buffer, req.file.mimetype),
   ])
+
+  const placeholder = `blob:local/${Date.now()}-${req.file.originalname}`
+  const blobResult = blobSettled ?? { url: placeholder, thumbnailUrl: placeholder }
 
   res.json({
     ok: true,

@@ -1,4 +1,6 @@
-import 'dotenv/config'
+import { config } from 'dotenv'
+config()
+config({ path: '.env.local', override: true })
 
 function required(name: string): string {
   const val = process.env[name]

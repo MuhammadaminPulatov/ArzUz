@@ -33,7 +33,7 @@ export async function analyzePhoto(imageBuffer: Buffer, mimeType: string): Promi
           { inline_data: { mime_type: mimeType, data: imageBuffer.toString('base64') } },
         ],
       }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 512 },
+      generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
     }
 
     const res = await fetch(url, {
