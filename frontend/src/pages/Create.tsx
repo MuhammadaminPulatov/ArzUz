@@ -6,7 +6,7 @@ import {
   Tag, Lightbulb, Image as ImageIcon, Edit3, Sparkles,
   Building2, Zap, Brain,
 } from 'lucide-react'
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { CATEGORIES } from '../data/mock'
@@ -49,6 +49,18 @@ interface LatLng { lat: number; lng: number }
 function MapMarker({ pos, onChange }: { pos: LatLng; onChange: (p: LatLng) => void }) {
   useMapEvents({ click(e) { onChange({ lat: e.latlng.lat, lng: e.latlng.lng }) } })
   return <Marker position={[pos.lat, pos.lng]} icon={pinIcon} />
+}
+
+function MapRecenter({ pos }: { pos: LatLng }) {
+  const map = useMap()
+  useEffect(() => { map.setView([pos.lat, pos.lng], 15, { animate: true }) }, [pos.lat, pos.lng])
+  return null
+}
+
+function buildFormalComplaint(ai: AIResult, addr: string, categoryLabel: string): string {
+  const dept = DEPT_MAP[categoryLabel] ?? 'Mahalla inspeksiyasi'
+  const addrLine = addr ? `${addr} manzilida ` : ''
+  return `Hurmatli ${dept} rahbariyatiga,\n\n${addrLine}${ai.aiTitle.toLowerCase()}.\n\n${ai.aiDescription}\n\nUshbu muammoni imkon qadar tezroq hal etishingizni so'rayman.\n\nHurmat bilan.`
 }
 
 const STEP_LABELS: Record<Step, string> = {
@@ -128,6 +140,7 @@ export default function Create({ onSuccess }: CreateProps) {
   const [submitted, setSubmitted] = useState(false)
   const [submittedId, setSubmittedId] = useState<string | null>(null)
   const [descMode, setDescMode] = useState<'text'|'voice'>('text')
+  const [descManuallyEdited, setDescManuallyEdited] = useState(false)
 
   const { pos, address, locating, handleGPS, setPos, setAddress } = useGPS()
   const { isListening, isSupported, transcript, interim, start, stop, reset } = useVoiceTranscription()
@@ -145,6 +158,15 @@ export default function Create({ onSuccess }: CreateProps) {
   useEffect(() => {
     if (transcript) setDescription(transcript)
   }, [transcript])
+
+  // Rebuild formal complaint when GPS address resolves (if user hasn't manually edited)
+  useEffect(() => {
+    if (!aiResult || descManuallyEdited) return
+    const catLabel = CATEGORIES.find(c => c.id === selectedCategoryId)?.label ?? ''
+    const formal = buildFormalComplaint(aiResult, address, catLabel)
+    setDescription(formal)
+    setFormattedDesc(formal)
+  }, [address, aiResult])
 
   // Cycle upload message: Yuklanmoqda → AI tahlil qilmoqda
   useEffect(() => {
@@ -172,8 +194,10 @@ export default function Create({ onSuccess }: CreateProps) {
           if (matched) setSelectedCategoryId(matched.id)
           if (ai.aiTitle) setTitle(ai.aiTitle)
           if (ai.aiDescription) {
-            setDescription(ai.aiDescription)
-            setFormattedDesc(ai.aiDescription)
+            const catLabel = matched?.label ?? ''
+            const formal = buildFormalComplaint(ai, address, catLabel)
+            setDescription(formal)
+            setFormattedDesc(formal)
           }
           setSeverity(ai.severity)
         }
@@ -273,6 +297,7 @@ export default function Create({ onSuccess }: CreateProps) {
     setFormattedDesc('')
     setSeverity('medium')
     setSubmittedId(null)
+    setDescManuallyEdited(false)
     reset()
   }
 
@@ -471,6 +496,7 @@ export default function Create({ onSuccess }: CreateProps) {
               <div className="rounded-2xl overflow-hidden mb-3" style={{ height: 210 }}>
                 <MapContainer center={[pos.lat, pos.lng]} zoom={15} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }} zoomControl={false}>
                   <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" />
+                  <MapRecenter pos={pos} />
                   <MapMarker pos={pos} onChange={p => { setPos(p); setAddress(`${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`) }} />
                 </MapContainer>
               </div>
@@ -535,11 +561,22 @@ export default function Create({ onSuccess }: CreateProps) {
               </div>
 
               {descMode === 'text' ? (
-                <textarea value={description} onChange={e => setDescription(e.target.value)}
-                  placeholder="Muammoni batafsil tasvirlab bering..."
-                  rows={5}
-                  className="w-full px-4 py-3 rounded-2xl text-[13px] leading-relaxed outline-none resize-none"
-                  style={{ background: '#F8FAFC', color: '#0F172A', border: '1.5px solid rgba(59,130,246,0.2)' }} />
+                <>
+                  {aiResult && !descManuallyEdited && (
+                    <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl"
+                      style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.15)' }}>
+                      <Brain size={12} strokeWidth={2} style={{ color: '#7C3AED' }} />
+                      <p className="text-[11px]" style={{ color: '#7C3AED' }}>
+                        AI rasmni tahlil qilib rasmiy murojaat yozdi — o'zgartirishingiz mumkin
+                      </p>
+                    </div>
+                  )}
+                  <textarea value={description} onChange={e => { setDescription(e.target.value); setDescManuallyEdited(true) }}
+                    placeholder="Muammoni batafsil tasvirlab bering..."
+                    rows={aiResult ? 8 : 5}
+                    className="w-full px-4 py-3 rounded-2xl text-[13px] leading-relaxed outline-none resize-none"
+                    style={{ background: '#F8FAFC', color: '#0F172A', border: `1.5px solid ${aiResult && !descManuallyEdited ? 'rgba(139,92,246,0.3)' : 'rgba(59,130,246,0.2)'}` }} />
+                </>
               ) : (
                 <div className="flex flex-col items-center gap-3">
                   {/* Mic button */}
