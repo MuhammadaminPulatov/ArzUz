@@ -9,6 +9,7 @@ import { ticketsRouter } from './routes/tickets'
 import { sseRouter } from './routes/sse'
 import { adminRouter } from './routes/admin'
 import { orgRouter } from './routes/org'
+import { superAdminRouter } from './routes/superadmin'
 
 export const app = express()
 
@@ -24,7 +25,8 @@ app.use('/api/upload',  uploadRouter)
 app.use('/api/tickets', ticketsRouter)
 app.use('/api/sse',     sseRouter)
 app.use('/api/admin',   adminRouter)
-app.use('/api/org',     orgRouter)
+app.use('/api/org',        orgRouter)
+app.use('/api/superadmin', superAdminRouter)
 
 app.use((_req, res) => res.status(404).json({ ok: false, error: 'Not found' }))
 
