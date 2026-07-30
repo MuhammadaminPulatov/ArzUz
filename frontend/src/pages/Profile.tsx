@@ -81,12 +81,14 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
   const [earnedBadgeIds, setEarnedBadgeIds] = useState<string[]>([])
   const [myTelegramId, setMyTelegramId] = useState('')
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [streak,  setStreak]  = useState(0)
+  const [spentXp, setSpentXp] = useState(0)
 
   useEffect(() => {
     api.get<{
       telegramId: string; firstName: string; xp: number; level: number;
       isAdmin: boolean; reportCount: number; resolvedCount: number;
-      badges: string[]; tickets: Report[]
+      badges: string[]; tickets: Report[]; streak?: number; spentXp?: number
     }>('/auth/me')
       .then((u) => {
         setMyTelegramId(u.telegramId)
@@ -99,6 +101,8 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
         setEarnedBadgeIds(u.badges ?? [])
         setMyReports((u.tickets ?? []).map(normalizeTicket as any))
         setTotalVotes((u.tickets ?? []).reduce((sum, t) => sum + ((t as any).votes ?? 0), 0))
+        setStreak(u.streak ?? 0)
+        setSpentXp(u.spentXp ?? 0)
       })
       .catch(() => {})
   }, [])
@@ -245,7 +249,7 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
           { Icon: FileText,     value: reportCount,  label: 'Ariza',      gradient: 'linear-gradient(135deg,#3B82F6,#6366F1)', shadow: 'rgba(99,102,241,0.2)' },
           { Icon: CheckCircle2, value: resolvedCount, label: 'Hal etildi', gradient: 'linear-gradient(135deg,#10B981,#059669)', shadow: 'rgba(16,185,129,0.2)' },
           { Icon: Heart,        value: totalVotes,    label: 'Ovoz',       gradient: 'linear-gradient(135deg,#8B5CF6,#6366F1)', shadow: 'rgba(139,92,246,0.2)' },
-          { Icon: Flame,        value: 0,             label: 'Streak',     gradient: 'linear-gradient(135deg,#F59E0B,#EF4444)', shadow: 'rgba(245,158,11,0.2)' },
+          { Icon: Flame,        value: streak,        label: 'Streak',     gradient: 'linear-gradient(135deg,#F59E0B,#EF4444)', shadow: 'rgba(245,158,11,0.2)' },
         ].map((s, i) => (
           <motion.div
             key={s.label}
@@ -480,9 +484,9 @@ export default function Profile({ onOpenAdmin }: ProfileProps) {
                 <div className="h-12 w-px ml-2" style={{ background: 'rgba(255,255,255,0.15)' }} />
                 <div className="flex-1">
                   <p className="text-[11px] text-blue-200 mb-1">Sarflangan</p>
-                  <p className="text-[16px] font-black text-white">320 XP</p>
+                  <p className="text-[16px] font-black text-white">{spentXp} XP</p>
                   <div className="h-1.5 rounded-full mt-1.5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.2)' }}>
-                    <div className="h-full rounded-full w-[17%]" style={{ background: '#FCD34D' }} />
+                    <div className="h-full rounded-full" style={{ width: `${xp + spentXp > 0 ? Math.round((spentXp / (xp + spentXp)) * 100) : 0}%`, background: '#FCD34D' }} />
                   </div>
                 </div>
               </div>
