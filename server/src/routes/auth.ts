@@ -99,14 +99,37 @@ authRouter.post('/telegram', async (req: Request, res: Response) => {
 
 // GET /api/auth/me
 authRouter.get('/me', authMiddleware, async (req: Request, res: Response) => {
-  const user = await User.findOne({ telegramId: (req as any).user!.telegramId }).lean()
+  const telegramId = (req as any).user!.telegramId as string
+  let user = await User.findOne({ telegramId }).lean()
   if (!user) {
     res.status(404).json({ ok: false, error: 'User not found' })
     return
   }
-  const tickets = await Ticket.find({ userId: (req as any).user!.telegramId })
-    .sort({ createdAt: -1 })
-    .limit(20)
+
+  // Daily streak — award +50 XP on first visit each day
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const lastDate = user.lastStreakDate ? new Date(user.lastStreakDate) : null
+  if (lastDate) lastDate.setHours(0, 0, 0, 0)
+
+  const isFirstToday = !lastDate || lastDate.getTime() < today.getTime()
+  if (isFirstToday) {
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const isConsecutive = !!lastDate && lastDate.getTime() === yesterday.getTime()
+    const newStreak = isConsecutive ? (user.streak ?? 0) + 1 : 1
+
+    await User.findOneAndUpdate(
+      { telegramId },
+      {
+        $inc: { xp: 50 },
+        $set: { streak: newStreak, lastStreakDate: new Date(), lastActiveAt: new Date() },
+      },
+    )
+    user = await User.findOne({ telegramId }).lean()
+  }
+
+  const tickets = await Ticket.find({ userId: telegramId }).sort({ createdAt: -1 }).limit(20)
 
   res.json({ ok: true, data: { ...user, isAdmin: (req as any).user!.isAdmin, tickets } })
 })
