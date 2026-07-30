@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Phone, MapPin } from 'lucide-react'
-import { MOCK_ORGANIZATIONS } from '@backend/mock/organizations'
+import { MOCK_ORGANIZATIONS } from '../../data/organizations'
 
 export default function AdminOrganizations() {
   const [expanded, setExpanded] = useState<string | null>(null)

@@ -4,7 +4,7 @@ import { Search, ChevronDown, FileText, ThumbsUp, Building2 } from 'lucide-react
 import { CATEGORIES } from '../../data/mock'
 import type { Report } from '../../types'
 import AssignOrgModal from './AssignOrgModal'
-import { MOCK_ORGANIZATIONS, type MockOrganization } from '@backend/mock/organizations'
+import { MOCK_ORGANIZATIONS, type MockOrganization } from '../../data/organizations'
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   new:         { label: 'Yangi',      color: '#F59E0B', bg: 'rgba(245,158,11,0.1)',  dot: '#F59E0B' },

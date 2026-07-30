@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Search } from 'lucide-react'
-import { MOCK_ORGANIZATIONS, type MockOrganization } from '@backend/mock/organizations'
+import { MOCK_ORGANIZATIONS, type MockOrganization } from '../../data/organizations'
 
 interface Props {
   reportCategory: string

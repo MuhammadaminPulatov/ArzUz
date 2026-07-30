@@ -10,7 +10,7 @@ import DistrictMap from '../components/DistrictMap'
 import { api } from '../lib/api'
 import { normalizeTicket, type RawTicket } from '../hooks/useReports'
 import type { Report } from '../types'
-import { type MockOrganization } from '@backend/mock/organizations'
+import { type MockOrganization } from '../data/organizations'
 
 interface AdminProps { onBack: () => void }
 
