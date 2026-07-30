@@ -14,6 +14,9 @@ export interface UserDoc extends mongoose.Document {
   resolvedCount: number
   lastActiveAt: Date
   createdAt: Date
+  streak: number
+  spentXp: number
+  lastStreakDate?: Date
 }
 
 interface UserModel extends mongoose.Model<UserDoc> {
@@ -37,8 +40,11 @@ const userSchema = new mongoose.Schema<UserDoc, UserModel>(
     plan:          { type: String, enum: ['free', 'premium'], default: 'free' },
     planExpiresAt: { type: Date },
     reportCount:   { type: Number, default: 0 },
-    resolvedCount: { type: Number, default: 0 },
-    lastActiveAt:  { type: Date, default: Date.now },
+    resolvedCount:  { type: Number, default: 0 },
+    lastActiveAt:   { type: Date, default: Date.now },
+    streak:         { type: Number, default: 0 },
+    spentXp:        { type: Number, default: 0 },
+    lastStreakDate:  { type: Date, default: null },
   },
   { timestamps: true },
 )
