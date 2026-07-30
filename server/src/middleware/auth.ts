@@ -6,6 +6,7 @@ export interface AuthUser {
   telegramId: string
   plan: 'free' | 'premium'
   isAdmin: boolean
+  isSuperAdmin: boolean
 }
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -16,7 +17,12 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
   try {
     const payload = jwt.verify(header.slice(7), env.jwtSecret) as AuthUser
-    ;(req as any).user = payload
+    ;(req as any).user = {
+      telegramId:   payload.telegramId,
+      plan:         payload.plan ?? 'free',
+      isAdmin:      payload.isAdmin === true,
+      isSuperAdmin: payload.isSuperAdmin === true,
+    }
     next()
   } catch {
     res.status(401).json({ ok: false, error: 'Invalid token' })

@@ -71,10 +71,11 @@ authRouter.post('/telegram', async (req: Request, res: Response) => {
   }
 
   const user = await User.upsertFromTelegram(userData)
-  const isAdmin = env.adminIds.includes(userData.telegramId)
+  const isAdmin      = env.adminIds.includes(userData.telegramId)
+  const isSuperAdmin = env.superAdminIds.includes(userData.telegramId)
 
   const token = jwt.sign(
-    { telegramId: userData.telegramId, plan: user.plan, isAdmin },
+    { telegramId: userData.telegramId, plan: user.plan, isAdmin, isSuperAdmin },
     env.jwtSecret,
     { expiresIn: '7d' },
   )
@@ -90,6 +91,7 @@ authRouter.post('/telegram', async (req: Request, res: Response) => {
         xp:         user.xp,
         plan:       user.plan,
         isAdmin,
+        isSuperAdmin,
       },
     },
   })

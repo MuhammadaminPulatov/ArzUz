@@ -16,5 +16,6 @@ export const env = {
   blobToken:         process.env['BLOB_READ_WRITE_TOKEN'] ?? process.env['VERCEL_BLOB_READ_WRITE_TOKEN'] ?? '',
   geminiKey:         process.env['GEMINI_API_KEY'] ?? '',
   adminIds:          (process.env['ADMIN_TELEGRAM_IDS'] ?? '').split(',').filter(Boolean),
+  superAdminIds:     (process.env['SUPER_ADMIN_TELEGRAM_IDS'] ?? '').split(',').filter(Boolean),
   port:              parseInt(process.env['PORT'] ?? '3001', 10),
 }
