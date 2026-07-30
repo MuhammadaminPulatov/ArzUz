@@ -8,8 +8,9 @@ import AdminUsers from '../components/admin/AdminUsers'
 import AdminAnalyticsSection from '../components/admin/AdminAnalytics'
 import DistrictMap from '../components/DistrictMap'
 import { api } from '../lib/api'
-import { normalizeTicket } from '../hooks/useReports'
+import { normalizeTicket, type RawTicket } from '../hooks/useReports'
 import type { Report } from '../types'
+import { type MockOrganization } from '@backend/mock/organizations'
 
 interface AdminProps { onBack: () => void }
 
@@ -24,7 +25,7 @@ export default function Admin({ onBack }: AdminProps) {
     setLoading(true)
     Promise.all([
       api.get<DashboardAnalytics>('/admin/analytics').catch(() => null),
-      api.get<{ tickets: unknown[]; total: number }>('/admin/tickets').catch(() => null),
+      api.get<{ tickets: RawTicket[]; total: number }>('/admin/tickets').catch(() => null),
     ]).then(([aData, rData]) => {
       setAnalytics(aData ?? { total: 0, byStatus: {}, avgResolutionDays: 0 })
       setReports((rData?.tickets ?? []).map(normalizeTicket))
@@ -38,6 +39,13 @@ export default function Admin({ onBack }: AdminProps) {
     setUpdatingId(id)
     await api.patch(`/admin/tickets/${id}`, { status }).catch(() => null)
     setReports(prev => prev.map(r => r.id === id ? { ...r, status } : r))
+    setUpdatingId(null)
+  }
+
+  const handleAssign = async (id: string, org: MockOrganization) => {
+    setUpdatingId(id)
+    await api.patch(`/admin/tickets/${id}`, { assignedOrgId: org.id, assignedOrgName: org.name, status: 'in_progress' }).catch(() => null)
+    setReports(prev => prev.map(r => r.id === id ? { ...r, assignedOrgName: org.name, status: 'in_progress' } : r))
     setUpdatingId(null)
   }
 
@@ -67,7 +75,7 @@ export default function Admin({ onBack }: AdminProps) {
 
         {activeSection === 'reports' && (
           <motion.div key="reports" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <AdminReports reports={reports} onStatusChange={handleStatusChange} updatingId={updatingId} />
+            <AdminReports reports={reports} onStatusChange={handleStatusChange} onAssign={handleAssign} updatingId={updatingId} />
           </motion.div>
         )}
 

@@ -20,6 +20,7 @@ export interface Report {
   aiSummary: string
   severity: 'low' | 'medium' | 'high'
   supporterAvatars: string[]
+  assignedOrgName?: string
 }
 
 export interface Badge {

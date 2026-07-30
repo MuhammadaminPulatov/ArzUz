@@ -4,12 +4,12 @@ import { api } from '../lib/api'
 import { onLocalReport } from '../lib/localEvents'
 import { SAMPLE_REPORTS, CATEGORIES } from '../data/mock'
 
-interface RawTicket {
+export interface RawTicket {
   id?: string; ticketId?: string; userId?: string; username?: string; firstName?: string
   category?: string; categoryLabel?: string; title?: string; aiTitle?: string
   description?: string; aiDescription?: string; address?: string
   lat?: number; lng?: number; status?: string; votes?: number
-  severity?: string; createdAt?: string
+  severity?: string; createdAt?: string; assignedOrgName?: string
 }
 
 interface TicketsResponse { tickets: RawTicket[]; total: number }
@@ -47,6 +47,7 @@ export function normalizeTicket(t: RawTicket): Report {
     aiSummary:      t.aiDescription ?? '',
     severity:       (t.severity as Report['severity']) ?? 'medium',
     supporterAvatars: [],
+    assignedOrgName: t.assignedOrgName,
   }
 }
 

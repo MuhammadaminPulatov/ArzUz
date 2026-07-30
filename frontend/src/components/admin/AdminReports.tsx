@@ -4,7 +4,7 @@ import { Search, ChevronDown, FileText, ThumbsUp, Building2 } from 'lucide-react
 import { CATEGORIES } from '../../data/mock'
 import type { Report } from '../../types'
 import AssignOrgModal from './AssignOrgModal'
-import { type MockOrganization } from '@backend/mock/organizations'
+import { MOCK_ORGANIZATIONS, type MockOrganization } from '@backend/mock/organizations'
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   new:         { label: 'Yangi',      color: '#F59E0B', bg: 'rgba(245,158,11,0.1)',  dot: '#F59E0B' },
@@ -18,15 +18,15 @@ const ITEMS_PER_PAGE = 20
 interface Props {
   reports: Report[]
   onStatusChange: (id: string, status: Report['status']) => void
+  onAssign: (id: string, org: MockOrganization) => void
   updatingId: string | null
 }
 
-export default function AdminReports({ reports, onStatusChange, updatingId }: Props) {
+export default function AdminReports({ reports, onStatusChange, onAssign, updatingId }: Props) {
   const [search, setSearch]                 = useState('')
   const [statusFilter, setStatusFilter]     = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [page, setPage]                     = useState(1)
-  const [assignedOrgs,    setAssignedOrgs]   = useState<Record<string, MockOrganization>>({})
   const [assigningReport, setAssigningReport] = useState<{ id: string; category: string } | null>(null)
 
   const filtered = useMemo(() => {
@@ -44,8 +44,7 @@ export default function AdminReports({ reports, onStatusChange, updatingId }: Pr
 
   const handleAssign = (org: MockOrganization) => {
     if (!assigningReport) return
-    setAssignedOrgs(prev => ({ ...prev, [assigningReport.id]: org }))
-    onStatusChange(assigningReport.id, 'in_progress')
+    onAssign(assigningReport.id, org)
     setAssigningReport(null)
   }
 
@@ -92,6 +91,9 @@ export default function AdminReports({ reports, onStatusChange, updatingId }: Pr
       <div className="md:grid md:grid-cols-2 md:gap-3 flex flex-col gap-3">
         {paginated.map((r, i) => {
           const st = STATUS_MAP[r.status] ?? STATUS_MAP['new']!
+          const assignedOrg = r.assignedOrgName
+            ? MOCK_ORGANIZATIONS.find(o => o.name === r.assignedOrgName) ?? null
+            : null
           return (
             <motion.div key={r.id}
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
@@ -142,11 +144,11 @@ export default function AdminReports({ reports, onStatusChange, updatingId }: Pr
                 })}
               </div>
 
-              {assignedOrgs[r.id] ? (
+              {assignedOrg ? (
                 <div className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-[11px] font-semibold"
                   style={{ background: 'rgba(59,130,246,0.08)', color: '#3B82F6', border: '1px solid rgba(59,130,246,0.2)' }}>
-                  <span className="text-base leading-none">{assignedOrgs[r.id]!.icon}</span>
-                  <span>{assignedOrgs[r.id]!.shortName}</span>
+                  <span className="text-base leading-none">{assignedOrg.icon}</span>
+                  <span>{assignedOrg.shortName}</span>
                   <span style={{ color: '#94A3B8' }}>ga yo'naltirildi</span>
                 </div>
               ) : (

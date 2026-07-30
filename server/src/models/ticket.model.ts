@@ -24,6 +24,8 @@ export interface TicketDoc extends mongoose.Document {
   votes: number
   voterIds: string[]
   channelMessageId?: number
+  assignedOrgId?: string
+  assignedOrgName?: string
   createdAt: Date
   updatedAt: Date
   resolvedAt?: Date
@@ -54,6 +56,8 @@ const ticketSchema = new mongoose.Schema<TicketDoc>(
     votes:             { type: Number, default: 0 },
     voterIds:          { type: [String], default: [] },
     channelMessageId:  { type: Number },
+    assignedOrgId:     { type: String, default: '' },
+    assignedOrgName:   { type: String, default: '' },
     resolvedAt:        { type: Date },
   },
   {

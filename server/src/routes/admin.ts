@@ -109,7 +109,7 @@ adminRouter.get('/districts', async (_req: Request, res: Response) => {
 
 // PATCH /api/admin/tickets/:id
 adminRouter.patch('/tickets/:id', async (req: Request, res: Response) => {
-  const allowed = ['status', 'aiTitle', 'aiDescription', 'department', 'severity', 'priority', 'channelMessageId']
+  const allowed = ['status', 'aiTitle', 'aiDescription', 'department', 'severity', 'priority', 'channelMessageId', 'assignedOrgId', 'assignedOrgName']
   const update: Record<string, unknown> = {}
   for (const key of allowed) {
     if ((req.body as Record<string, unknown>)[key] !== undefined) {
