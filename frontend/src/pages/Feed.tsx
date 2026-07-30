@@ -47,7 +47,6 @@ export default function Feed() {
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState('all')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [searchFocused, setSearchFocused] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [selectedReport, setSelectedReport] = useState<Report | null>(null)
 
@@ -73,7 +72,7 @@ export default function Feed() {
   const statValues = [totalVotes, resolvedCount, inProgressCount]
 
   return (
-    <div className="flex flex-col h-full overflow-hidden relative" style={{ background: '#F0F4FF' }}>
+    <div className="flex flex-col h-full overflow-hidden relative" style={{ background: '#F2F2F7' }}>
       <NotificationDrawer
         open={showNotifications}
         onClose={() => setShowNotifications(false)}
@@ -86,15 +85,15 @@ export default function Feed() {
       />
 
       {/* Header */}
-      <div className="px-4 pt-4 pb-0 shrink-0">
+      <div className="px-4 pt-5 pb-0 shrink-0" style={{ background: '#F2F2F7' }}>
         {/* Title row */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3.5">
           <div>
-            <h1 className="text-[20px] font-black tracking-tight" style={{ color: '#0F172A' }}>
-              Mahalla Muammolari
+            <h1 className="text-[26px] font-black tracking-tight leading-tight" style={{ color: '#1C1C1E', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+              Mahalla
             </h1>
-            <p className="text-[11.5px] font-medium mt-0.5" style={{ color: '#64748B' }}>
-              Birga yaxshilaymiz · {reports.length} ta muammo
+            <p className="text-[12px] font-medium" style={{ color: '#8E8E93' }}>
+              {reports.length} ta muammo · birga yaxshilaymiz
             </p>
           </div>
           <motion.button
@@ -118,52 +117,54 @@ export default function Feed() {
           </motion.button>
         </div>
 
-        {/* Stat cards */}
-        <div className="flex gap-2.5 mb-4">
+        {/* Stat row — compact iOS style */}
+        <div className="flex gap-2 mb-3.5">
           {STAT_CONFIGS.map((cfg, i) => {
             const Icon = cfg.icon
             return (
               <motion.div
                 key={cfg.key}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.07 }}
-                className="flex-1 rounded-2xl p-3 relative overflow-hidden"
-                style={{ background: '#fff', boxShadow: `0 4px 14px ${cfg.shadow}`, border: '1px solid rgba(226,232,240,0.6)' }}
+                transition={{ delay: i * 0.06 }}
+                className="flex-1 flex items-center gap-2 rounded-2xl px-3 py-2.5"
+                style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', border: '0.5px solid rgba(0,0,0,0.07)' }}
               >
-                <div className="absolute bottom-0 inset-x-0 h-0.5 rounded-b-2xl" style={{ background: cfg.color }} />
-                <Icon size={14} strokeWidth={2} style={{ color: cfg.color }} className="mb-1.5" />
-                <motion.div
-                  key={statValues[i]}
-                  initial={{ scale: 0.85, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="text-[18px] font-black leading-none"
-                  style={{ color: '#0F172A' }}
-                >
-                  {loading ? '—' : statValues[i]}
-                </motion.div>
-                <div className="text-[9.5px] font-semibold mt-1" style={{ color: '#94A3B8' }}>{cfg.label}</div>
+                <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${cfg.color}18` }}>
+                  <Icon size={13} strokeWidth={2.2} style={{ color: cfg.color }} />
+                </div>
+                <div>
+                  <motion.div
+                    key={statValues[i]}
+                    initial={{ scale: 0.85, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="text-[16px] font-black leading-none"
+                    style={{ color: '#1C1C1E' }}
+                  >
+                    {loading ? '—' : statValues[i]}
+                  </motion.div>
+                  <div className="text-[9px] font-semibold mt-0.5" style={{ color: '#8E8E93' }}>{cfg.label}</div>
+                </div>
               </motion.div>
             )
           })}
         </div>
 
-        {/* Search */}
-        <motion.div animate={{ scale: searchFocused ? 1.01 : 1 }} transition={{ duration: 0.18 }} className="relative mb-3">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2" strokeWidth={2} style={{ color: searchFocused ? '#3B82F6' : '#94A3B8', transition: 'color 0.2s' }} />
+        {/* Search — iOS style */}
+        <div className="relative mb-3">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={2} style={{ color: '#8E8E93' }} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            placeholder="Muammo yoki manzil qidiring..."
-            className="w-full pl-10 pr-10 py-2.5 rounded-2xl text-[13px] outline-none transition-all"
+            onFocus={() => {}}
+            onBlur={() => {}}
+            placeholder="Qidirish..."
+            className="w-full pl-8.5 pr-8 py-2 rounded-[10px] text-[15px] outline-none"
             style={{
-              background: '#fff',
-              color: '#0F172A',
-              border: `1.5px solid ${searchFocused ? 'rgba(59,130,246,0.4)' : 'rgba(226,232,240,0.8)'}`,
-              boxShadow: searchFocused ? '0 0 0 3px rgba(59,130,246,0.08)' : '0 1px 4px rgba(15,23,42,0.05)',
+              background: 'rgba(118,118,128,0.12)',
+              color: '#1C1C1E',
+              fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
             }}
           />
           <AnimatePresence>
@@ -180,7 +181,7 @@ export default function Feed() {
               </motion.button>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
 
         {/* Category pills */}
         <div className="flex gap-2 overflow-x-auto pb-1.5" style={{ scrollbarWidth: 'none' }}>
@@ -246,7 +247,7 @@ export default function Feed() {
       </div>
 
       {/* Feed */}
-      <div className="flex-1 overflow-y-auto px-4 pb-28 flex flex-col gap-3 pt-1">
+      <div className="flex-1 overflow-y-auto px-4 pb-28 flex flex-col gap-3 pt-2" style={{ background: '#F2F2F7' }}>
         {loading ? (
           <div className="flex flex-col gap-3 pt-2">
             {[1, 2, 3].map((i) => (

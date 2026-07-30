@@ -10,11 +10,14 @@ import { sseRouter } from './routes/sse'
 import { adminRouter } from './routes/admin'
 import { orgRouter } from './routes/org'
 import { superAdminRouter } from './routes/superadmin'
+import { setupSwagger } from './swagger'
 
 export const app = express()
 
 app.use(cors({ origin: '*' }))
 app.use(express.json())
+
+setupSwagger(app)
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, ts: Date.now() })

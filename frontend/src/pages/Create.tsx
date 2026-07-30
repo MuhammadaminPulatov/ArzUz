@@ -15,6 +15,7 @@ import { useVoiceTranscription } from '../hooks/useVoiceTranscription'
 import { api } from '../lib/api'
 import { dispatchLocalReport } from '../lib/localEvents'
 import { getTelegramUserName } from '../hooks/useAuth'
+import { useTelegramMainButton, useTelegramBackButton, haptic } from '../hooks/useTelegramUI'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -302,8 +303,32 @@ export default function Create({ onSuccess }: CreateProps) {
   }
 
   const goBack = () => {
+    haptic('select')
     if (stepIndex > 0) setStep(STEP_ORDER[stepIndex - 1])
   }
+
+  // Telegram native button integration — must be called before any early return
+  const mainBtnText =
+    step === 'confirm'     ? 'Murojaatni Yuborish' :
+    step === 'description' ? 'AI Formatlash →' :
+    'Keyingi qadam →'
+  const mainBtnEnabled =
+    step === 'photo'       ? (!!selectedCategoryId && !uploading) :
+    step === 'format'      ? (!formatting && !!formattedDesc.trim()) :
+    step === 'description' ? (description.length >= 5 || title.length >= 3) :
+    !submitted
+
+  const handleNext = useCallback(() => {
+    haptic('tap')
+    if (step === 'photo')       setStep('location')
+    else if (step === 'location')    setStep('description')
+    else if (step === 'description') runFormat()
+    else if (step === 'format')      setStep('confirm')
+    else if (step === 'confirm')     void handleSubmit()
+  }, [step, runFormat])
+
+  useTelegramMainButton(mainBtnText, handleNext, !submitted && mainBtnEnabled)
+  useTelegramBackButton(!submitted && stepIndex > 0 ? goBack : null)
 
   if (submitted) {
     return (
@@ -424,6 +449,41 @@ export default function Create({ onSuccess }: CreateProps) {
                 </div>
               )}
 
+              {/* AI Analysis Result Card — shown after upload + analysis */}
+              {aiResult && !uploading && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', damping: 20, stiffness: 260 }}
+                  className="mb-4 rounded-2xl overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg,rgba(124,58,237,0.07),rgba(99,102,241,0.04))', border: '1.5px solid rgba(124,58,237,0.22)' }}
+                >
+                  <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid rgba(124,58,237,0.1)' }}>
+                    <div className="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg,#7C3AED,#6366F1)' }}>
+                      <Brain size={16} className="text-white" strokeWidth={2} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[12.5px] font-black" style={{ color: '#6D28D9' }}>Gemini AI tahlil natijasi</p>
+                      <p className="text-[10.5px]" style={{ color: '#94A3B8' }}>
+                        Ishonch: <span style={{ color: '#7C3AED', fontWeight: 700 }}>{aiResult.confidence}%</span>
+                        {selectedCategory && <span> · {selectedCategory.icon} {selectedCategory.label}</span>}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-1 rounded-xl" style={{ background: 'rgba(16,185,129,0.12)', color: '#059669' }}>✓ Tayyor</span>
+                  </div>
+                  <div className="px-4 py-3">
+                    {aiResult.aiTitle && (
+                      <p className="text-[13px] font-bold mb-1.5 leading-snug" style={{ color: '#0F172A' }}>{aiResult.aiTitle}</p>
+                    )}
+                    {aiResult.aiDescription && (
+                      <p className="text-[11.5px] leading-relaxed" style={{ color: '#64748B' }}>
+                        {aiResult.aiDescription.slice(0, 130)}{aiResult.aiDescription.length > 130 ? '...' : ''}
+                      </p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
               {/* Category */}
               <div className="mb-4">
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -442,7 +502,7 @@ export default function Create({ onSuccess }: CreateProps) {
                     const isActive = selectedCategoryId === cat.id
                     return (
                       <motion.button key={cat.id} whileTap={{ scale: 0.94 }}
-                        onClick={() => setSelectedCategoryId(cat.id)}
+                        onClick={() => { haptic('select'); setSelectedCategoryId(cat.id) }}
                         className="flex items-center gap-2.5 px-3 py-3 rounded-2xl text-left"
                         style={{
                           background: isActive ? cat.color : '#fff',
