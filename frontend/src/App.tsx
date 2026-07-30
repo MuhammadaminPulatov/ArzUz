@@ -5,6 +5,7 @@ import Feed from './pages/Feed'
 import Create from './pages/Create'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
+import OrgPanel from './pages/OrgPanel'
 import { useAuth } from './hooks/useAuth'
 import { useSSE } from './hooks/useSSE'
 
@@ -14,6 +15,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('feed')
   const [prevTab, setPrevTab] = useState<Tab>('feed')
   const [showAdmin, setShowAdmin] = useState(false)
+  const [showOrg,   setShowOrg]   = useState(false)
 
   const { token, loading: authLoading } = useAuth()
   useSSE(token)
@@ -26,6 +28,7 @@ export default function App() {
       tg.setBackgroundColor?.('#F8FAFC')
     }
     if (window.location.search.includes('admin=1')) setShowAdmin(true)
+    if (window.location.search.includes('org=1'))   setShowOrg(true)
   }, [])
 
   if (authLoading) {
@@ -51,6 +54,22 @@ export default function App() {
 
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: '100dvh', background: '#F8FAFC' }}>
+
+      {/* Org panel overlay */}
+      <AnimatePresence>
+        {showOrg && (
+          <motion.div
+            initial={{ opacity: 0, y: 32 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 32 }}
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            className="absolute inset-0 z-50 flex flex-col overflow-hidden"
+            style={{ background: '#F8FAFC' }}
+          >
+            <OrgPanel onBack={() => setShowOrg(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Admin overlay */}
       <AnimatePresence>
