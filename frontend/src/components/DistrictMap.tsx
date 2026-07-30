@@ -1,26 +1,39 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-const TOSHKENT_DISTRICTS = [
-  { id: 'yunusobod',      name: 'Yunusobod',       lat: 41.3350, lng: 69.2900, total: 18, byCategory: { road: 8, light: 4, water: 2, garbage: 3, other: 1 },  dominant: 'road',  dominantColor: '#EF4444' },
-  { id: 'mirzo-ulugbek',  name: "Mirzo Ulug'bek",  lat: 41.3110, lng: 69.2780, total: 14, byCategory: { road: 5, light: 3, water: 4, garbage: 2 },            dominant: 'road',  dominantColor: '#EF4444' },
-  { id: 'chilonzor',      name: 'Chilonzor',        lat: 41.2810, lng: 69.2070, total: 22, byCategory: { road: 6, light: 7, water: 3, garbage: 5, other: 1 },  dominant: 'light', dominantColor: '#F59E0B' },
-  { id: 'yakkasaroy',     name: 'Yakkasaroy',       lat: 41.2780, lng: 69.2450, total: 9,  byCategory: { road: 3, light: 2, water: 3, garbage: 1 },            dominant: 'road',  dominantColor: '#EF4444' },
-  { id: 'shayxontohur',   name: 'Shayxontohur',     lat: 41.3220, lng: 69.2420, total: 16, byCategory: { road: 4, light: 3, water: 6, garbage: 3 },            dominant: 'water', dominantColor: '#3B82F6' },
-  { id: 'almazar',        name: 'Olmazor',           lat: 41.3400, lng: 69.2200, total: 11, byCategory: { road: 5, light: 2, water: 2, garbage: 2 },            dominant: 'road',  dominantColor: '#EF4444' },
-  { id: 'bektemir',       name: 'Bektemir',          lat: 41.2420, lng: 69.2820, total: 7,  byCategory: { road: 3, light: 1, water: 2, garbage: 1 },            dominant: 'road',  dominantColor: '#EF4444' },
-  { id: 'sergeli',        name: 'Sergeli',            lat: 41.2520, lng: 69.2340, total: 13, byCategory: { road: 4, light: 5, water: 2, garbage: 2 },           dominant: 'light', dominantColor: '#F59E0B' },
-  { id: 'uchtepa',        name: 'Uchtepa',            lat: 41.2870, lng: 69.2120, total: 10, byCategory: { road: 3, light: 2, water: 4, garbage: 1 },           dominant: 'water', dominantColor: '#3B82F6' },
-  { id: 'yashnobod',      name: 'Yashnobod',          lat: 41.3020, lng: 69.3150, total: 8,  byCategory: { road: 3, light: 2, water: 1, garbage: 2 },           dominant: 'road',  dominantColor: '#EF4444' },
-  { id: 'lagan',          name: 'Mirobod',             lat: 41.2970, lng: 69.2650, total: 15, byCategory: { road: 5, light: 4, water: 3, garbage: 3 },          dominant: 'road',  dominantColor: '#EF4444' },
-]
+import { api } from '../lib/api'
+
+interface DistrictStat {
+  district: string
+  total: number
+  byCategory: Record<string, number>
+  dominant: string
+  dominantColor: string
+}
+
+const DISTRICT_COORDS: Record<string, [number, number]> = {
+  'Yunusobod tumani':       [41.335, 69.290],
+  "Mirzo Ulug'bek tumani":  [41.311, 69.278],
+  'Chilonzor tumani':       [41.281, 69.207],
+  'Yakkasaroy tumani':      [41.278, 69.245],
+  'Shayxontohur tumani':    [41.322, 69.242],
+  'Olmazor tumani':         [41.340, 69.220],
+  'Bektemir tumani':        [41.242, 69.282],
+  'Sergeli tumani':         [41.252, 69.234],
+  'Uchtepa tumani':         [41.287, 69.212],
+  'Yashnobod tumani':       [41.302, 69.315],
+  'Mirobod tumani':         [41.297, 69.265],
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
-  road:    "Yo'l",
-  light:   'Chiroq',
-  water:   'Suv',
-  garbage: 'Axlat',
-  other:   'Boshqa',
+  road:     "Yo'l",
+  light:    'Chiroq',
+  water:    'Suv',
+  electric: 'Elektr',
+  trash:    'Axlat',
+  tree:     'Daraxt',
+  building: 'Bino',
+  other:    'Boshqa',
 }
 
 function radiusFor(total: number) {
@@ -33,10 +46,15 @@ function pct(count: number, total: number) {
 
 export default function DistrictMap() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
+  const mapRef       = useRef<L.Map | null>(null)
+  const [districts, setDistricts] = useState<DistrictStat[]>([])
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
+    api.get<DistrictStat[]>('/admin/districts').then(setDistricts).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current || districts.length === 0) return
 
     const map = L.map(containerRef.current, {
       center: [41.299, 69.24],
@@ -51,10 +69,12 @@ export default function DistrictMap() {
 
     L.control.zoom({ position: 'bottomright' }).addTo(map)
 
-    TOSHKENT_DISTRICTS.forEach((d) => {
+    districts.forEach((d) => {
+      const coords = DISTRICT_COORDS[d.district]
+      if (!coords) return
       const radius = radiusFor(d.total)
 
-      const circle = L.circleMarker([d.lat, d.lng], {
+      const circle = L.circleMarker(coords, {
         radius,
         fillColor: d.dominantColor,
         fillOpacity: 0.75,
@@ -83,7 +103,7 @@ export default function DistrictMap() {
       }).setContent(`
         <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:4px 0">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <div style="font-size:13px;font-weight:800;color:#0F172A">${d.name}</div>
+            <div style="font-size:13px;font-weight:800;color:#0F172A">${d.district}</div>
             <div style="background:${d.dominantColor};color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px">${d.total} ta</div>
           </div>
           ${categoryRows}
@@ -96,28 +116,37 @@ export default function DistrictMap() {
 
     mapRef.current = map
     return () => { map.remove(); mapRef.current = null }
-  }, [])
+  }, [districts])
+
+  const maxTotal = Math.max(...districts.map((x) => x.total), 1)
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-2xl overflow-hidden" style={{ height: 360, border: '1px solid rgba(226,232,240,0.8)', boxShadow: '0 2px 12px rgba(15,23,42,0.06)' }}>
-        <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
-      </div>
+      {districts.length === 0 && (
+        <div className="rounded-2xl flex items-center justify-center"
+          style={{ height: 360, background: '#fff', border: '1px solid rgba(226,232,240,0.8)' }}>
+          <p className="text-[13px]" style={{ color: '#94A3B8' }}>Ma'lumot yuklanmoqda...</p>
+        </div>
+      )}
+      {districts.length > 0 && (
+        <div className="rounded-2xl overflow-hidden"
+          style={{ height: 360, border: '1px solid rgba(226,232,240,0.8)', boxShadow: '0 2px 12px rgba(15,23,42,0.06)' }}>
+          <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
+        </div>
+      )}
 
-      {/* Legend */}
-      <div
-        className="rounded-2xl p-4"
-        style={{ background: '#fff', border: '1px solid rgba(226,232,240,0.8)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}
-      >
+      <div className="rounded-2xl p-4"
+        style={{ background: '#fff', border: '1px solid rgba(226,232,240,0.8)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
         <p className="text-[12px] font-bold mb-3" style={{ color: '#64748B' }}>ASOSIY KATEGORIYA</p>
         <div className="flex flex-wrap gap-2">
           {[
-            { label: "Yo'l", color: '#EF4444' },
+            { label: "Yo'l",    color: '#EF4444' },
             { label: 'Chiroq', color: '#F59E0B' },
-            { label: 'Suv', color: '#3B82F6' },
-            { label: 'Axlat', color: '#10B981' },
+            { label: 'Suv',    color: '#3B82F6' },
+            { label: 'Axlat',  color: '#10B981' },
           ].map(({ label, color }) => (
-            <div key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl" style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
+            <div key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl"
+              style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
               <span className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
               <span className="text-[11.5px] font-semibold" style={{ color: '#475569' }}>{label}</span>
             </div>
@@ -128,38 +157,36 @@ export default function DistrictMap() {
         </p>
       </div>
 
-      {/* District ranking */}
-      <div
-        className="rounded-2xl p-4"
-        style={{ background: '#fff', border: '1px solid rgba(226,232,240,0.8)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}
-      >
-        <p className="text-[13.5px] font-black mb-3" style={{ color: '#0F172A' }}>Muammo reytingi</p>
-        {[...TOSHKENT_DISTRICTS]
-          .sort((a, b) => b.total - a.total)
-          .map((d, i) => {
-            const maxTotal = Math.max(...TOSHKENT_DISTRICTS.map((x) => x.total))
+      {districts.length > 0 && (
+        <div className="rounded-2xl p-4"
+          style={{ background: '#fff', border: '1px solid rgba(226,232,240,0.8)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
+          <p className="text-[13.5px] font-black mb-3" style={{ color: '#0F172A' }}>Muammo reytingi</p>
+          {districts.map((d, i) => {
             const barW = Math.round((d.total / maxTotal) * 100)
             return (
-              <div key={d.id} className="flex items-center gap-3 mb-3">
-                <span className="text-[11px] font-bold w-4 text-right shrink-0" style={{ color: i < 3 ? d.dominantColor : '#94A3B8' }}>
+              <div key={d.district} className="flex items-center gap-3 mb-3">
+                <span className="text-[11px] font-bold w-4 text-right shrink-0"
+                  style={{ color: i < 3 ? d.dominantColor : '#94A3B8' }}>
                   {i + 1}
                 </span>
                 <div className="flex-1">
                   <div className="flex justify-between mb-1">
-                    <span className="text-[12px] font-semibold" style={{ color: '#0F172A' }}>{d.name}</span>
+                    <span className="text-[12px] font-semibold" style={{ color: '#0F172A' }}>{d.district}</span>
                     <span className="text-[11px] font-bold" style={{ color: d.dominantColor }}>{d.total} ta</span>
                   </div>
                   <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.15)' }}>
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${barW}%`, background: d.dominantColor, opacity: 0.8 }}
-                    />
+                    <div className="h-full rounded-full"
+                      style={{ width: `${barW}%`, background: d.dominantColor, opacity: 0.8 }} />
                   </div>
                 </div>
               </div>
             )
           })}
-      </div>
+          {districts.length === 0 && (
+            <p className="text-[12px] text-center py-4" style={{ color: '#94A3B8' }}>Hali ariza yo'q</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
