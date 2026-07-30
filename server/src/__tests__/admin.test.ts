@@ -65,6 +65,17 @@ describe('GET /api/admin/analytics', () => {
   })
 })
 
+describe('GET /api/admin/districts', () => {
+  it('returns district stats array', async () => {
+    const res = await request(app)
+      .get('/api/admin/districts')
+      .set('Authorization', `Bearer ${makeAdminToken()}`)
+    expect(res.status).toBe(200)
+    expect(res.body.ok).toBe(true)
+    expect(Array.isArray(res.body.data)).toBe(true)
+  })
+})
+
 describe('PATCH /api/admin/tickets/:id', () => {
   it('admin can update status and aiTitle', async () => {
     const t = await seedTicket()

@@ -55,6 +55,58 @@ adminRouter.get('/analytics', async (_req: Request, res: Response) => {
   })
 })
 
+const CATEGORY_COLORS: Record<string, string> = {
+  road:     '#EF4444',
+  light:    '#F59E0B',
+  water:    '#3B82F6',
+  electric: '#8B5CF6',
+  trash:    '#10B981',
+  tree:     '#10B981',
+  building: '#6366F1',
+  other:    '#94A3B8',
+}
+
+// GET /api/admin/districts
+adminRouter.get('/districts', async (_req: Request, res: Response) => {
+  const raw = await Ticket.aggregate([
+    {
+      $group: {
+        _id: { district: '$district', category: '$category' },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $group: {
+        _id: '$_id.district',
+        total: { $sum: '$count' },
+        categories: {
+          $push: { category: '$_id.category', count: '$count' },
+        },
+      },
+    },
+  ])
+
+  const stats = raw
+    .filter((r) => r._id && r._id !== '')
+    .map((r) => {
+      const byCategory: Record<string, number> = {}
+      for (const c of r.categories as Array<{ category: string; count: number }>) {
+        byCategory[c.category] = c.count
+      }
+      const dominant = Object.entries(byCategory).sort(([, a], [, b]) => b - a)[0]?.[0] ?? 'other'
+      return {
+        district: r._id as string,
+        total: r.total as number,
+        byCategory,
+        dominant,
+        dominantColor: CATEGORY_COLORS[dominant] ?? '#94A3B8',
+      }
+    })
+    .sort((a, b) => b.total - a.total)
+
+  res.json({ ok: true, data: stats })
+})
+
 // PATCH /api/admin/tickets/:id
 adminRouter.patch('/tickets/:id', async (req: Request, res: Response) => {
   const allowed = ['status', 'aiTitle', 'aiDescription', 'department', 'severity', 'priority', 'channelMessageId']
