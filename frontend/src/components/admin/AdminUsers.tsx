@@ -7,25 +7,25 @@ interface LeaderboardUser {
   telegramId: string
   firstName: string
   username?: string
-  totalTickets: number
+  reportCount: number
   xp: number
 }
 
-type SortKey = 'xp' | 'totalTickets'
+type SortKey = 'xp' | 'reportCount'
 
 const AVATAR_COLORS = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#6366F1']
 
-function getLevel(totalTickets: number) {
-  if (totalTickets > 20) return { label: 'Ekspert',  color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' }
-  if (totalTickets >= 5) return { label: 'Faol',     color: '#3B82F6', bg: 'rgba(59,130,246,0.1)'  }
-  return                        { label: 'Yangi',    color: '#10B981', bg: 'rgba(16,185,129,0.1)'  }
+function getLevel(reportCount: number) {
+  if (reportCount > 20) return { label: 'Ekspert',  color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' }
+  if (reportCount >= 5) return { label: 'Faol',     color: '#3B82F6', bg: 'rgba(59,130,246,0.1)'  }
+  return                       { label: 'Yangi',    color: '#10B981', bg: 'rgba(16,185,129,0.1)'  }
 }
 
 export default function AdminUsers() {
   const [users, setUsers]     = useState<LeaderboardUser[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
-  const [sortBy, setSortBy]   = useState<SortKey>('xp')
+  const [sortBy, setSortBy] = useState<SortKey>('xp')
 
   useEffect(() => {
     api.get<LeaderboardUser[]>('/auth/leaderboard')
@@ -71,7 +71,7 @@ export default function AdminUsers() {
             className="appearance-none pl-3 pr-7 py-2.5 rounded-xl text-[12px] font-semibold outline-none"
             style={{ background: '#fff', border: '1px solid rgba(226,232,240,0.8)', color: '#475569', boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }}>
             <option value="xp">XP bo'yicha</option>
-            <option value="totalTickets">Ariza bo'yicha</option>
+            <option value="reportCount">Ariza bo'yicha</option>
           </select>
           <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#94A3B8' }} />
         </div>
@@ -90,7 +90,7 @@ export default function AdminUsers() {
           </thead>
           <tbody>
             {filtered.map((u, i) => {
-              const level = getLevel(u.totalTickets)
+              const level = getLevel(u.reportCount)
               const color = AVATAR_COLORS[i % AVATAR_COLORS.length]!
               return (
                 <tr key={u.telegramId}
@@ -108,7 +108,7 @@ export default function AdminUsers() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[13px] font-bold" style={{ color: '#0F172A' }}>{u.totalTickets}</td>
+                  <td className="px-4 py-3 text-[13px] font-bold" style={{ color: '#0F172A' }}>{u.reportCount}</td>
                   <td className="px-4 py-3 text-[13px] font-bold" style={{ color: '#6366F1' }}>{u.xp}</td>
                   <td className="px-4 py-3">
                     <span className="text-[11px] font-bold px-2.5 py-1 rounded-full"
@@ -127,7 +127,7 @@ export default function AdminUsers() {
       {/* Mobile cards */}
       <div className="md:hidden flex flex-col gap-2">
         {filtered.map((u, i) => {
-          const level = getLevel(u.totalTickets)
+          const level = getLevel(u.reportCount)
           const color = AVATAR_COLORS[i % AVATAR_COLORS.length]!
           return (
             <motion.div key={u.telegramId}
@@ -146,7 +146,7 @@ export default function AdminUsers() {
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
                   style={{ background: level.bg, color: level.color }}>{level.label}</span>
                 <div className="flex items-center gap-2 text-[11px]" style={{ color: '#94A3B8' }}>
-                  <span>{u.totalTickets} ariza</span>
+                  <span>{u.reportCount} ariza</span>
                   <span>·</span>
                   <span style={{ color: '#6366F1', fontWeight: 700 }}>{u.xp} XP</span>
                 </div>
