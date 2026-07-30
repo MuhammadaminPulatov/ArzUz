@@ -101,7 +101,7 @@ ticketsRouter.post('/', authMiddleware, createLimiter, async (req: Request, res:
     userNote:          body.userNote ?? '',
   })
 
-  await User.updateOne({ telegramId: user.telegramId }, { $inc: { reportCount: 1, xp: 50 } })
+  await User.updateOne({ telegramId: user.telegramId }, { $inc: { xp: 150, reportCount: 1 } })
   sseService.ticketCreated(ticket.toObject())
 
   res.status(201).json({ ok: true, data: ticket })

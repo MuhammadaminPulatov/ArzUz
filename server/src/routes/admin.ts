@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import { authMiddleware } from '../middleware/auth'
 import { adminOnly } from '../middleware/adminOnly'
 import { Ticket } from '../models/ticket.model'
+import { User } from '../models/user.model'
 import { sseService } from '../services/sseService'
 
 export const adminRouter = Router()
@@ -122,6 +123,13 @@ adminRouter.patch('/tickets/:id', async (req: Request, res: Response) => {
   if (!ticket) {
     res.status(404).json({ ok: false, error: 'Ticket not found' })
     return
+  }
+
+  if (update['status'] === 'resolved') {
+    await User.findOneAndUpdate(
+      { telegramId: ticket.userId },
+      { $inc: { xp: 300, resolvedCount: 1 } },
+    )
   }
 
   if (update['status']) sseService.ticketUpdated(req.params['id']!, { status: update['status'] })
