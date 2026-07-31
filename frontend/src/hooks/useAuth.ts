@@ -73,7 +73,7 @@ export function useAuth() {
           firstName: tgUser?.first_name ?? 'Foydalanuvchi',
           xp: 850,
           plan: tgUser?.is_premium ? 'premium' : 'free',
-          isAdmin: true,
+          isAdmin: false,
         }
         cachedToken = devToken
         cachedUser = fallbackUser

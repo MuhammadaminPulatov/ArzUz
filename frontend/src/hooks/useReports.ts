@@ -78,7 +78,7 @@ export function useReports() {
   }, [])
 
   const updateReport = useCallback((id: string, patch: Partial<Report>) => {
-    setReports((prev) => prev.map((r) => (r.id === id || r.id === id ? { ...r, ...patch } : r)))
+    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
   }, [])
 
   return { reports, setReports, loading, addReport, updateReport }
